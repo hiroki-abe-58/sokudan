@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-09-20T18:23:51+0900",
+  "generator_model": "qwen3:30b-a3b-instruct-2507-q4_K_M",
+  "temperature": 0.9,
+  "seed": 20260920,
+  "documents_requested": 3000,
+  "documents_kept": 2965,
+  "variants_per_attribute": 4,
+  "elapsed_s": 2456.1,
+  "train_examples": 22304,
+  "val_examples": 1416,
+  "train_documents": 2788,
+  "val_documents": 177,
+  "document_overlap_between_splits": [],
+  "catalog": {
+    "n_domains": 14,
+    "n_attributes": 28,
+    "attributes_by_kind": {
+      "choice": 8,
+      "bool": 10,
+      "score": 10
+    },
+    "score_level_counts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "choice_option_counts": [
+      4,
+      5,
+      6
+    ]
+  },
+  "rejections": {
+    "leaked:対応": 148,
+    "leaked:期間": 100,
+    "leaked:設計": 58,
+    "leaked:必要": 41,
+    "meta:以下": 40,
+    "leaked:価格": 34,
+    "leaked:考えている": 33,
+    "leaked:手続き": 31,
+    "leaked:実装": 11,
+    "leaked:仕様": 9,
+    "leaked:注意": 7,
+    "leaked:重大": 6,
+    "too_short": 4,
+    "leaked:表記": 4,
+    "leaked:未経験": 4,
+    "leaked:コピー": 3,
+    "leaked:設備": 3,
+    "leaked:知的財産": 3,
+    "leaked:交通費": 2,
+    "leaked:これから": 2,
+    "leaked:不要": 2,
+    "leaked:中身": 2,
+    "leaked:権利関係": 2,
+    "meta:承知": 2,
+    "leaked:様子見": 1,
+    "leaked:文面": 1,
+    "leaked:管理部門": 1,
+    "leaked:注意喚起": 1,
+    "leaked:経理": 1,
+    "leaked:通信費": 1,
+    "leaked:秘密保持": 1,
+    "leaked:文言": 1,
+    "leaked:一部の利用者": 1,
+    "leaked:実務経験あり": 1,
+    "leaked:責任範囲": 1
+  },
+  "examples_by_kind": {
+    "choice": 6340,
+    "score": 7964,
+    "bool": 8000
+  },
+  "examples_by_domain": {
+    "internal_request": 1616,
+    "review_request": 1616,
+    "moderation": 1624,
+    "social_post": 1592,
+    "training_feedback": 1608,
+    "survey_freetext": 1440,
+    "incident_report": 1648,
+    "supplier_message": 1568,
+    "product_review": 1576,
+    "expense_claim": 1600,
+    "meeting_minutes": 1592,
+    "contract_clause": 1536,
+    "job_application": 1680,
+    "phishing": 1608
+  },
+  "option_counts": {
+    "2": 9018,
+    "3": 2546,
+    "4": 3457,
+    "5": 2858,
+    "6": 2679,
+    "7": 1277,
+    "8": 284,
+    "9": 185
+  },
+  "bench_ja_leakage": {
+    "bench_label_collisions": {},
+    "bench_instruction_collisions": {},
+    "clean": true
+  }
+}

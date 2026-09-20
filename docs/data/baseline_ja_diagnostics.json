@@ -1,0 +1,73 @@
+{
+  "model": "convaiinnovations/laya-multilingual",
+  "n_items": 300,
+  "bool": {
+    "gold_positive_rate": 0.2966666666666667,
+    "majority_accuracy": 0.7033333333333334,
+    "mean_p_true": 0.43353533333333333,
+    "accuracy_at_0.5": 0.5433333333333333,
+    "accuracy_rate_matched": 0.6133333333333333,
+    "rate_matched_threshold": 0.8374,
+    "auroc": 0.5227381649715107,
+    "verdict": "ranking is near chance -- 'broken' is supported"
+  },
+  "score": {
+    "variants": {
+      "原文（急がない→早めに→業務が止まっている）": {
+        "criteria": [
+          "急がない",
+          "早めに",
+          "業務が止まっている"
+        ],
+        "reversed": false,
+        "pred_counts": [
+          0,
+          167,
+          133
+        ],
+        "lowest_level_predicted": 0,
+        "accuracy": 0.44666666666666666,
+        "rps": 0.232392290661545,
+        "mae_argmax": 0.6166666666666667,
+        "spearman_expectation_vs_gold": 0.3138487020711033
+      },
+      "選択肢の順序を逆転": {
+        "criteria": [
+          "業務が止まっている",
+          "早めに",
+          "急がない"
+        ],
+        "reversed": true,
+        "pred_counts": [
+          250,
+          50,
+          0
+        ],
+        "lowest_level_predicted": 250,
+        "accuracy": 0.27,
+        "rps": 0.3472083116291139,
+        "mae_argmax": 0.94,
+        "spearman_expectation_vs_gold": 0.15794073594502434
+      },
+      "言い換え（低→中→高）": {
+        "criteria": [
+          "低",
+          "中",
+          "高"
+        ],
+        "reversed": false,
+        "pred_counts": [
+          1,
+          291,
+          8
+        ],
+        "lowest_level_predicted": 1,
+        "accuracy": 0.47333333333333333,
+        "rps": 0.21393276541422143,
+        "mae_argmax": 0.53,
+        "spearman_expectation_vs_gold": 0.19220610196213198
+      }
+    },
+    "verdict": "at least one schema revives the lowest level -- this is schema fragility, not a dead ordinal head; rewrite the claim accordingly"
+  }
+}

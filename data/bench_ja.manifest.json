@@ -1,0 +1,52 @@
+{
+  "generated_at": "2026-09-20T16:50:35+0900",
+  "generator_model": "qwen3:30b-a3b-instruct-2507-q4_K_M",
+  "generator_base_url": "http://localhost:11434/v1",
+  "temperature": 0.9,
+  "seed": 20260920,
+  "requested": 300,
+  "kept": 300,
+  "dropped": 0,
+  "elapsed_s": 262.8,
+  "rejections": {
+    "leaked:請求": 21,
+    "leaked:早めに": 12,
+    "leaked:営業": 9,
+    "meta:以下": 1,
+    "leaked:技術": 1
+  },
+  "target_weights": {
+    "department": {
+      "請求": 0.35,
+      "技術": 0.3,
+      "営業": 0.2,
+      "その他": 0.15
+    },
+    "urgency": {
+      "急がない": 0.3,
+      "早めに": 0.45,
+      "業務が止まっている": 0.25
+    },
+    "churn_true_rate": 0.3
+  },
+  "realised_counts": {
+    "department": {
+      "技術": 97,
+      "請求": 114,
+      "営業": 51,
+      "その他": 38
+    },
+    "urgency": {
+      "早めに": 138,
+      "急がない": 77,
+      "業務が止まっている": 85
+    },
+    "churn_true": 89,
+    "churn_false": 211
+  },
+  "mean_state_chars": 305.1,
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "usage": "評価専用。学習データに混ぜないでください。このセットは未知スキーマへの汎化を測るための held-out テストセットです。",
+  "usage_en": "Evaluation only. Please do not mix into training data. This set exists to measure generalisation to unseen schemas and stops being able to do so once trained on."
+}

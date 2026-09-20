@@ -1,0 +1,122 @@
+{
+  "score_k_coverage": {
+    "2": [
+      "internal_request.complete"
+    ],
+    "3": [
+      "moderation.severity",
+      "survey_freetext.recommendation",
+      "contract_clause.risk_level"
+    ],
+    "4": [
+      "job_application.experience_fit",
+      "incident_report.impact_scope"
+    ],
+    "5": [
+      "product_review.star",
+      "social_post.sentiment"
+    ],
+    "6": [
+      "training_feedback.difficulty"
+    ],
+    "7": [
+      "phishing.risk"
+    ]
+  },
+  "bool_skew": {
+    "attributes": [
+      {
+        "domain": "review_request",
+        "attribute": "blocks_others",
+        "p_true": 0.38,
+        "direction": "false寄り"
+      },
+      {
+        "domain": "product_review",
+        "attribute": "mentions_shipping",
+        "p_true": 0.45,
+        "direction": "ほぼ均衡"
+      },
+      {
+        "domain": "meeting_minutes",
+        "attribute": "has_decision",
+        "p_true": 0.58,
+        "direction": "true寄り"
+      },
+      {
+        "domain": "meeting_minutes",
+        "attribute": "owner_named",
+        "p_true": 0.52,
+        "direction": "ほぼ均衡"
+      },
+      {
+        "domain": "phishing",
+        "attribute": "is_phishing",
+        "p_true": 0.4,
+        "direction": "false寄り"
+      },
+      {
+        "domain": "incident_report",
+        "attribute": "cause_identified",
+        "p_true": 0.45,
+        "direction": "ほぼ均衡"
+      },
+      {
+        "domain": "social_post",
+        "attribute": "is_ironic",
+        "p_true": 0.3,
+        "direction": "false寄り"
+      },
+      {
+        "domain": "expense_claim",
+        "attribute": "policy_violation",
+        "p_true": 0.28,
+        "direction": "false寄り"
+      },
+      {
+        "domain": "training_feedback",
+        "attribute": "would_attend_again",
+        "p_true": 0.62,
+        "direction": "true寄り"
+      },
+      {
+        "domain": "supplier_message",
+        "attribute": "needs_reply",
+        "p_true": 0.6,
+        "direction": "true寄り"
+      }
+    ],
+    "directions": {
+      "false寄り": 4,
+      "ほぼ均衡": 3,
+      "true寄り": 3
+    },
+    "mixed": true
+  },
+  "state_length": {
+    "synthetic": {
+      "n": 2788,
+      "min": 23,
+      "p25": 64.0,
+      "median": 106.0,
+      "p75": 157.0,
+      "p95": 222.0,
+      "max": 403,
+      "mean": 115.89024390243902
+    },
+    "bench_ja": {
+      "n": 300,
+      "min": 19,
+      "p25": 63.0,
+      "median": 108.5,
+      "p75": 167.5,
+      "p95": 236.0,
+      "max": 333,
+      "mean": 117.55666666666667
+    },
+    "median_ratio": 1.0235849056603774,
+    "limit": 2.0,
+    "figure": "docs\\img\\state_length.png"
+  },
+  "failures": []
+}

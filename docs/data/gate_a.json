@@ -1,0 +1,127 @@
+{
+  "env": {
+    "timestamp": "2026-09-20T13:16:11+0900",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.9",
+    "torch": "2.11.0+cu128",
+    "torch_cuda_build": "12.8",
+    "device_name": "NVIDIA GeForce RTX 5090",
+    "device_capability": [
+      12,
+      0
+    ],
+    "arch_list": [
+      "sm_75",
+      "sm_80",
+      "sm_86",
+      "sm_90",
+      "sm_100",
+      "sm_120"
+    ],
+    "backbone": "sbintuitions/modernbert-ja-310m"
+  },
+  "flash_attn": {
+    "importable": false,
+    "version": null,
+    "detail": "module not found"
+  },
+  "rows": [
+    {
+      "attn_implementation": "sdpa",
+      "seq_len": 128,
+      "batch_size": 32,
+      "iters": 10,
+      "latency_ms_mean": 20.961,
+      "latency_ms_p50": 20.95,
+      "latency_ms_p95": 23.019,
+      "sequences_per_sec": 1526.6,
+      "tokens_per_sec": 195410.4,
+      "peak_vram_mib": 745.3
+    },
+    {
+      "attn_implementation": "sdpa",
+      "seq_len": 256,
+      "batch_size": 32,
+      "iters": 10,
+      "latency_ms_mean": 39.71,
+      "latency_ms_p50": 39.79,
+      "latency_ms_p95": 41.561,
+      "sequences_per_sec": 805.9,
+      "tokens_per_sec": 206298.0,
+      "peak_vram_mib": 872.7
+    },
+    {
+      "attn_implementation": "sdpa",
+      "seq_len": 512,
+      "batch_size": 32,
+      "iters": 10,
+      "latency_ms_mean": 79.629,
+      "latency_ms_p50": 79.696,
+      "latency_ms_p95": 81.734,
+      "sequences_per_sec": 401.9,
+      "tokens_per_sec": 205755.3,
+      "peak_vram_mib": 1131.0
+    },
+    {
+      "attn_implementation": "sdpa",
+      "seq_len": 1024,
+      "batch_size": 32,
+      "iters": 10,
+      "latency_ms_mean": 173.952,
+      "latency_ms_p50": 173.327,
+      "latency_ms_p95": 179.81,
+      "sequences_per_sec": 184.0,
+      "tokens_per_sec": 188373.7,
+      "peak_vram_mib": 1659.5
+    },
+    {
+      "attn_implementation": "eager",
+      "seq_len": 128,
+      "batch_size": 32,
+      "iters": 10,
+      "latency_ms_mean": 23.606,
+      "latency_ms_p50": 23.617,
+      "latency_ms_p95": 24.504,
+      "sequences_per_sec": 1355.6,
+      "tokens_per_sec": 173514.7,
+      "peak_vram_mib": 757.6
+    },
+    {
+      "attn_implementation": "eager",
+      "seq_len": 256,
+      "batch_size": 32,
+      "iters": 10,
+      "latency_ms_mean": 51.782,
+      "latency_ms_p50": 51.572,
+      "latency_ms_p95": 55.674,
+      "sequences_per_sec": 618.0,
+      "tokens_per_sec": 158200.8,
+      "peak_vram_mib": 958.7
+    },
+    {
+      "attn_implementation": "eager",
+      "seq_len": 512,
+      "batch_size": 32,
+      "iters": 10,
+      "latency_ms_mean": 131.791,
+      "latency_ms_p50": 131.512,
+      "latency_ms_p95": 135.832,
+      "sequences_per_sec": 242.8,
+      "tokens_per_sec": 124318.2,
+      "peak_vram_mib": 1787.0
+    },
+    {
+      "attn_implementation": "eager",
+      "seq_len": 1024,
+      "batch_size": 32,
+      "iters": 10,
+      "latency_ms_mean": 378.756,
+      "latency_ms_p50": 378.026,
+      "latency_ms_p95": 384.209,
+      "sequences_per_sec": 84.5,
+      "tokens_per_sec": 86514.7,
+      "peak_vram_mib": 4907.5
+    }
+  ],
+  "failures": {}
+}

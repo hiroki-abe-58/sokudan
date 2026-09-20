@@ -1,0 +1,386 @@
+{
+  "environment": {
+    "timestamp": "2026-09-20T16:59:32+0900",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.9",
+    "torch": "2.11.0+cu128",
+    "device_name": "NVIDIA GeForce RTX 5090",
+    "device_capability": [
+      12,
+      0
+    ],
+    "laya": "0.3.4"
+  },
+  "bench": {
+    "path": "data/bench_ja.jsonl",
+    "n_items": 300,
+    "departments": [
+      "請求",
+      "技術",
+      "営業",
+      "その他"
+    ],
+    "urgency_levels": [
+      "急がない",
+      "早めに",
+      "業務が止まっている"
+    ],
+    "gold_counts": {
+      "department": {
+        "請求": 114,
+        "技術": 97,
+        "営業": 51,
+        "その他": 38
+      },
+      "urgency": {
+        "急がない": 77,
+        "早めに": 138,
+        "業務が止まっている": 85
+      },
+      "churn_true": 89,
+      "churn_false": 211
+    }
+  },
+  "probability_floor": 5e-05,
+  "jev": "not measured; see docs/baseline_ja.md",
+  "results": [
+    {
+      "name": "laya-multilingual (ja)",
+      "choice": {
+        "accuracy": 0.7466666666666667,
+        "macro_f1": 0.6279966832250625,
+        "ece": 0.14771033528083466,
+        "brier": 0.39859480039799483,
+        "nll": 0.9339551725601765,
+        "mean_confidence": 0.8801517387942488
+      },
+      "score": {
+        "accuracy": 0.44333333333333336,
+        "macro_f1": 0.3384803332532244,
+        "ece": 0.18142181073521474,
+        "brier": 0.7421567644736843,
+        "nll": 1.5005263750077262,
+        "mean_confidence": 0.6239383957270473,
+        "rps": 0.2322418415622861,
+        "mae_argmax": 0.62,
+        "mae_expectation": 0.6861337179804204
+      },
+      "bool": {
+        "accuracy": 0.5433333333333333,
+        "macro_f1": 0.5093064625890948,
+        "ece": 0.3518400000666634,
+        "brier": 0.748013835433315,
+        "nll": 1.5529829286225392,
+        "mean_confidence": 0.8842800000666633
+      },
+      "latency": {
+        "p50_ms": 18.462250001903158,
+        "p95_ms": 30.632399998467008,
+        "mean_ms": 21.783075333466208,
+        "questions_per_sec": 137.72160055797906
+      },
+      "parse_failures": 0,
+      "parse_attempts": 900,
+      "parse_failure_rate": 0.0,
+      "notes": {
+        "model_id": "convaiinnovations/laya-multilingual",
+        "description": "structured output; no text parsing required",
+        "probability_resolution": "API returns 4-decimal probabilities"
+      },
+      "wall_clock_s": 15.6
+    },
+    {
+      "name": "laya (英語版モデルに日本語入力)",
+      "choice": {
+        "accuracy": 0.4666666666666667,
+        "macro_f1": 0.4599847819271428,
+        "ece": 0.107850497703195,
+        "brier": 0.6604891795570152,
+        "nll": 1.2162553972944063,
+        "mean_confidence": 0.3588161689634717
+      },
+      "score": {
+        "accuracy": 0.46,
+        "macro_f1": 0.29722490436002075,
+        "ece": 0.06254737964074046,
+        "brier": 0.6443611926208468,
+        "nll": 1.0739584636639363,
+        "mean_confidence": 0.4657389796413431,
+        "rps": 0.19983803570194672,
+        "mae_argmax": 0.6033333333333334,
+        "mae_expectation": 0.5924680720626008
+      },
+      "bool": {
+        "accuracy": 0.30333333333333334,
+        "macro_f1": 0.2393638315682207,
+        "ece": 0.6342176668999884,
+        "brier": 1.2232754209999168,
+        "nll": 2.7016490321618303,
+        "mean_confidence": 0.9343390002333217
+      },
+      "latency": {
+        "p50_ms": 23.37334999901941,
+        "p95_ms": 37.3481799975707,
+        "mean_ms": 25.76727200006038,
+        "questions_per_sec": 116.4267602714393
+      },
+      "parse_failures": 0,
+      "parse_attempts": 900,
+      "parse_failure_rate": 0.0,
+      "notes": {
+        "model_id": "convaiinnovations/laya",
+        "description": "structured output; no text parsing required",
+        "probability_resolution": "API returns 4-decimal probabilities"
+      },
+      "wall_clock_s": 11.4
+    },
+    {
+      "name": "多数決クラス",
+      "choice": {
+        "accuracy": 0.38,
+        "macro_f1": 0.13768115942028986,
+        "ece": 1.1102230246251565e-16,
+        "brier": 0.706111111111111,
+        "nll": 1.2956992434217216,
+        "mean_confidence": 0.3799999999999999
+      },
+      "score": {
+        "accuracy": 0.46,
+        "macro_f1": 0.21004566210045664,
+        "ece": 5.551115123125783e-17,
+        "brier": 0.6422444444444445,
+        "nll": 1.063584531869185,
+        "mean_confidence": 0.4600000000000001,
+        "rps": 0.19692222222222228,
+        "mae_argmax": 0.54,
+        "mae_expectation": 0.5515555555555555
+      },
+      "bool": {
+        "accuracy": 0.7033333333333334,
+        "macro_f1": 0.4129158512720157,
+        "ece": 1.1102230246251565e-16,
+        "brier": 0.4173111111111112,
+        "nll": 0.608013464424166,
+        "mean_confidence": 0.7033333333333333
+      },
+      "latency": null,
+      "parse_failures": 0,
+      "parse_attempts": 0,
+      "parse_failure_rate": null,
+      "notes": {
+        "description": "empirical prior of bench_ja, computed on the eval set itself",
+        "prior_department": {
+          "請求": 0.38,
+          "技術": 0.3233,
+          "営業": 0.17,
+          "その他": 0.1267
+        },
+        "prior_urgency": [
+          0.2567,
+          0.46,
+          0.2833
+        ],
+        "prior_churn_true": 0.2967
+      },
+      "wall_clock_s": 0.0
+    },
+    {
+      "name": "ランダム",
+      "choice": {
+        "accuracy": 0.25333333333333335,
+        "macro_f1": 0.22804420476130802,
+        "ece": 0.0033330407689854957,
+        "brier": 0.7499999824138236,
+        "nll": 1.386294325947536,
+        "mean_confidence": 0.25000029256434786
+      },
+      "score": {
+        "accuracy": 0.4033333333333333,
+        "macro_f1": 0.3938098104034986,
+        "ece": 0.06999975174769041,
+        "brier": 0.6666666105628529,
+        "nll": 1.0986122045123925,
+        "mean_confidence": 0.3333335815856429,
+        "rps": 0.20111109614085837,
+        "mae_argmax": 0.7766666666666666,
+        "mae_expectation": 0.540000127758841
+      },
+      "bool": {
+        "accuracy": 0.5133333333333333,
+        "macro_f1": 0.48697526236881555,
+        "ece": 0.013333159911689374,
+        "brier": 0.5000000093880544,
+        "nll": 0.6931471899479997,
+        "mean_confidence": 0.5000001734216439
+      },
+      "latency": null,
+      "parse_failures": 0,
+      "parse_attempts": 0,
+      "parse_failure_rate": null,
+      "notes": {
+        "description": "uniform probabilities; argmax randomised by a 1e-6 jitter",
+        "seed": 20260920,
+        "why_jitter": "argmax breaks exact ties to index 0, which would make a uniform baseline score the first option's base rate"
+      },
+      "wall_clock_s": 0.0
+    },
+    {
+      "name": "ローカル LLM-as-classifier",
+      "choice": {
+        "accuracy": 0.8933333333333333,
+        "macro_f1": 0.8180732773604329,
+        "ece": 0.10401718908830321,
+        "brier": 0.20912536942343546,
+        "nll": 1.0281308504210878,
+        "mean_confidence": 0.9973505224216365
+      },
+      "score": {
+        "accuracy": 0.7033333333333334,
+        "macro_f1": 0.6471521257183576,
+        "ece": 0.2965666766656666,
+        "brier": 0.5932443572294437,
+        "nll": 2.938134635586051,
+        "mean_confidence": 0.999900009999,
+        "rps": 0.16664300669056517,
+        "mae_argmax": 0.3333333333333333,
+        "mae_expectation": 0.3333643302336433
+      },
+      "bool": {
+        "accuracy": 0.87,
+        "macro_f1": 0.8592244107278217,
+        "ece": 0.1299500024998751,
+        "brier": 0.259974006299435,
+        "nll": 1.2875033805797387,
+        "mean_confidence": 0.9999500024998751
+      },
+      "latency": {
+        "p50_ms": 954.0000000015425,
+        "p95_ms": 1110.000000000582,
+        "mean_ms": 970.9333333333416,
+        "questions_per_sec": 3.089810491623154
+      },
+      "parse_failures": 1,
+      "parse_attempts": 900,
+      "parse_failure_rate": 0.0011111111111111111,
+      "notes": {
+        "temperature": 0.0,
+        "description": "one-word answer, parsed against the option list",
+        "hard_labels": "emits a label, not a distribution, so top-1 confidence is 1.0 by construction and its ECE is bounded below by (1 - accuracy). Unparseable replies are scored as the uniform distribution.",
+        "caveat": "this model generated bench_ja, so it scores its own distribution"
+      },
+      "wall_clock_s": 73.2
+    },
+    {
+      "name": "laya-multilingual (ja) + 温度較正（2-fold交差適合）",
+      "choice": {
+        "accuracy": 0.7466666666666667,
+        "macro_f1": 0.6279966832250625,
+        "ece": 0.08712618715039011,
+        "brier": 0.37383066659539554,
+        "nll": 0.7377853593131857,
+        "mean_confidence": 0.7362705355741307
+      },
+      "score": {
+        "accuracy": 0.44333333333333336,
+        "macro_f1": 0.3384803332532244,
+        "ece": 0.034836787606488596,
+        "brier": 0.6463890698009656,
+        "nll": 1.0658499902214897,
+        "mean_confidence": 0.4084965457268448,
+        "rps": 0.19623474104824984,
+        "mae_argmax": 0.62,
+        "mae_expectation": 0.5952470769305988
+      },
+      "bool": {
+        "accuracy": 0.5433333333333333,
+        "macro_f1": 0.5093064625890948,
+        "ece": 0.011671806109582138,
+        "brier": 0.4944308381831044,
+        "nll": 0.6876456057456952,
+        "mean_confidence": 0.5550051394429154
+      },
+      "latency": {
+        "p50_ms": 18.462250001903158,
+        "p95_ms": 30.632399998467008,
+        "mean_ms": 21.783075333466208,
+        "questions_per_sec": 137.72160055797906
+      },
+      "parse_failures": 0,
+      "parse_attempts": 900,
+      "parse_failure_rate": 0.0,
+      "notes": {
+        "derived_from": "laya-multilingual (ja)",
+        "description": "post-hoc temperature scaling, fitted out-of-fold",
+        "temperatures_choice": [
+          1.9842,
+          2.0326
+        ],
+        "temperatures_score": [
+          5.3744,
+          6.9151
+        ],
+        "temperatures_bool": [
+          19.9999,
+          12.1253
+        ]
+      },
+      "wall_clock_s": 0.0
+    },
+    {
+      "name": "laya (英語版モデルに日本語入力) + 温度較正（2-fold交差適合）",
+      "choice": {
+        "accuracy": 0.4666666666666667,
+        "macro_f1": 0.4599847819271428,
+        "ece": 0.05802188217839589,
+        "brier": 0.6380915253117484,
+        "nll": 1.1570832986151376,
+        "mean_confidence": 0.5038895351464028
+      },
+      "score": {
+        "accuracy": 0.46,
+        "macro_f1": 0.29722490436002075,
+        "ece": 0.0668721726994373,
+        "brier": 0.6432154685464527,
+        "nll": 1.0668000612169681,
+        "mean_confidence": 0.42253274516136696,
+        "rps": 0.19837240196156866,
+        "mae_argmax": 0.6033333333333334,
+        "mae_expectation": 0.5794962384293197
+      },
+      "bool": {
+        "accuracy": 0.30333333333333334,
+        "macro_f1": 0.2393638315682207,
+        "ece": 0.24213135585060924,
+        "brier": 0.5454146453097317,
+        "nll": 0.7390870221122365,
+        "mean_confidence": 0.5454646891839424
+      },
+      "latency": {
+        "p50_ms": 23.37334999901941,
+        "p95_ms": 37.3481799975707,
+        "mean_ms": 25.76727200006038,
+        "questions_per_sec": 116.4267602714393
+      },
+      "parse_failures": 0,
+      "parse_attempts": 900,
+      "parse_failure_rate": 0.0,
+      "notes": {
+        "derived_from": "laya (英語版モデルに日本語入力)",
+        "description": "post-hoc temperature scaling, fitted out-of-fold",
+        "temperatures_choice": [
+          0.3521,
+          0.5026
+        ],
+        "temperatures_score": [
+          1.5423,
+          1.4679
+        ],
+        "temperatures_bool": [
+          20.0,
+          20.0
+        ]
+      },
+      "wall_clock_s": 0.0
+    }
+  ]
+}
