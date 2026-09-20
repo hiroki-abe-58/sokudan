@@ -1,5 +1,9 @@
 # 即断 / sokudan
 
+本リポジトリは (1) 日本語 System One モデル `sokudan` のコード、(2) 評価セット `bench_ja`、
+(3) Laya の日本語実測 [`docs/baseline_ja.md`](docs/baseline_ja.md) を含みます。
+**学習済みモデル v0.1 は準備中です。**
+
 **日本語 System One 意思決定モデル。**
 日本語テキスト（state）と型付き質問（questions）を受け取り、
 **テキストを一切生成せずに**単一フォワードパスで型付き回答と確率を返すエンコーダモデルです。
