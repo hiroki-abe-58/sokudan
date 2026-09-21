@@ -46,6 +46,7 @@ from typing import Any
 from sokudan.data import intent_attributes as ia
 from sokudan.data.builders.synthetic import (
     CATALOG,
+    LONG_LENGTHS,
     SYSTEM_PROMPT,
     Domain,
     banned_words_for,
@@ -57,6 +58,7 @@ from sokudan.data.local_llm import LocalLLM, LocalLLMError
 
 MIN_CHARS = 60
 MAX_CHARS = 1600
+MAX_CHARS_LONG = 3000
 META_MARKERS = ["以下", "承知", "```", "本文:", "###", "了解"]
 
 VERIFY_SYSTEM = (
@@ -71,11 +73,11 @@ HELD_OUT_IMPLICIT = sorted(
 )
 
 
-def validate(text: str, banned: list[str]) -> str | None:
+def validate(text: str, banned: list[str], ceiling: int = MAX_CHARS) -> str | None:
     body = text.strip()
     if len(body) < MIN_CHARS:
         return "too_short"
-    if len(body) > MAX_CHARS:
+    if len(body) > ceiling:
         return "too_long"
     for word in banned:
         if word in body:
@@ -126,12 +128,14 @@ def plan_document(
 async def generate_one(
     llm: LocalLLM, domain: Domain, plan: dict[str, Any], rng: random.Random,
     *, temperature: float, max_attempts: int, rejections: Counter,
+    lengths: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any] | None:
     banned = banned_words_for(domain) + intent_banned_phrases(plan["intents"])
+    ceiling = MAX_CHARS_LONG if lengths else MAX_CHARS
 
     for attempt in range(max_attempts):
         prompt, meta = build_intent_prompt(
-            domain, plan["domain_labels"], plan["intents"], rng
+            domain, plan["domain_labels"], plan["intents"], rng, lengths
         )
         try:
             result = await llm.chat(
@@ -144,7 +148,7 @@ async def generate_one(
             continue
 
         body = result.text.strip()
-        reason = validate(body, banned)
+        reason = validate(body, banned, ceiling)
         if reason is None:
             return {
                 "doc_id": plan["doc_id"],
@@ -380,6 +384,7 @@ async def main_async(args: argparse.Namespace) -> int:
                 random.Random(args.seed * 7_919 + index),
                 temperature=args.temperature, max_attempts=args.max_attempts,
                 rejections=rejections,
+                lengths=LONG_LENGTHS if args.long else None,
             )
             done += 1
             if done % 250 == 0:
@@ -487,6 +492,8 @@ def main() -> int:
     parser.add_argument("--concurrency", type=int, default=16)
     parser.add_argument("--max-attempts", type=int, default=4)
     parser.add_argument("--val-fraction", type=float, default=0.15)
+    parser.add_argument("--long", action="store_true",
+                        help="generate 600-2200 character states for the length stress test")
     parser.add_argument("--paraphrase-sample", type=int, default=300)
     return asyncio.run(main_async(parser.parse_args()))
 

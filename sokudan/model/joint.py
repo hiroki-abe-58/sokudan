@@ -53,7 +53,8 @@ class JointBatch:
 class SokudanJointModel(nn.Module):
     """Backbone + marker scorer + the shared ordinal head. No decision head."""
 
-    def __init__(self, backbone: Backbone, *, scorer_init_std: float = 0.002) -> None:
+    def __init__(self, backbone: Backbone, *, scorer_init_std: float = 0.002,
+                 use_ordinal: bool = True) -> None:
         super().__init__()
         spec = backbone.spec
         self.backbone = backbone
@@ -63,6 +64,10 @@ class SokudanJointModel(nn.Module):
         # option an identical logit *and* an identical gradient.
         self.scorer = nn.Linear(spec.hidden_size, 1, bias=False)
         nn.init.normal_(self.scorer.weight, std=scorer_init_std)
+        # Ablation (d) sets this false: `score` rows then go through the same
+        # within-question softmax as `choice`, which is what the dynamic-K
+        # cumulative link is supposed to beat.
+        self.use_ordinal = use_ordinal
         self.ordinal = OrdinalHead(spec.hidden_size)
 
     @classmethod
@@ -72,6 +77,7 @@ class SokudanJointModel(nn.Module):
         *,
         attn_implementation: str = "sdpa",
         dtype: torch.dtype = torch.float32,
+        use_ordinal: bool = True,
     ) -> SokudanJointModel:
         from sokudan.config import BACKBONE_MODEL_ID
 
@@ -80,7 +86,7 @@ class SokudanJointModel(nn.Module):
             attn_implementation=attn_implementation,
             dtype=dtype,
         )
-        return cls(backbone)
+        return cls(backbone, use_ordinal=use_ordinal)
 
     @property
     def hidden_size(self) -> int:
@@ -127,7 +133,7 @@ class SokudanJointModel(nn.Module):
         expectation: Tensor | None = None
         survival: Tensor | None = None
 
-        if bool(ordered.any()):
+        if self.use_ordinal and bool(ordered.any()):
             if n_markers < 2:
                 raise ValueError("an ordinal question needs at least 2 option slots")
             rows = ordered.nonzero(as_tuple=True)[0]

@@ -1,0 +1,4 @@
+# The package itself, from the public repository. Brings torch, transformers,
+# safetensors and huggingface_hub with it.
+git+https://github.com/hiroki-abe-58/sokudan.git@main
+gradio>=4.44

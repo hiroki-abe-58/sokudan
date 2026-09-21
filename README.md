@@ -1,5 +1,7 @@
 # 即断 / sokudan
 
+*[English README](README_en.md)*
+
 **日本語 System One 意思決定モデル。**
 日本語テキスト（state）と型付き質問（questions）を受け取り、
 **テキストを一切生成せずに**単一フォワードパスで型付き回答と確率を返すエンコーダモデルです。
@@ -204,8 +206,12 @@ train / eval / serve はすべてここを import します。
   argmax をそのまま使うと true を取りこぼします。**温度スケーリングでは補正されません**
   （較正後も 0.170）。利用者側の事前確率に合わせて閾値を決めてください。
 - **選択肢が 4 段階の `score` で精度が落ちます。** 位置バイアス検査の E 条件（4段階）は
-  acc 0.427 で、3 段階の A〜D（0.697〜0.788）から明確に落ちます。
-  K=4 以上の性能を K=3 から外挿しないでください。
+  acc **0.427 ± 0.072** で、3 段階の A〜D（0.697〜0.788）から明確に落ちます。
+  **ただし原因は K ではありません**: held-out を K 別に分解すると K=4 は学習ビュー最多
+  （24.4%）で acc も K=3 より高く、K に対して単調でもありません
+  （[`docs/benchmarks.md`](docs/benchmarks.md) §5 の追試）。
+  残る説明はその条件固有の選択肢の並びですが、**未検証の仮説です。**
+  いずれにせよ K≥4 の性能を K=3 から外挿しないでください。
 - **温度較正は `score` を悪化させます。** choice ECE 0.147→0.092、bool ECE 0.202→0.129 と
   改善する一方、**score RPS は 0.090→0.149 と悪化**します。既定は未較正です。
   `temperatures.json` は同梱しますが、**自前の検証セットで再フィットすることを推奨します**。
@@ -237,17 +243,21 @@ train / eval / serve はすべてここを import します。
   「state は 1 リクエストにつき 1 回」という当初の主張は撤回しました
   （[`docs/architecture.md`](docs/architecture.md) §1.2）。質問側エンコードのキャッシュも
   joint では効きません。
-- **位置に依存する質問と長い state は未検証です。** backbone の `local_attention` は 128 です。
-  held-out の位置依存属性「文末が問いかけで終わっているか」は **AUROC 0.688** にとどまり、
+- **state が長くなると未知スキーマの精度が下がります。** backbone の `local_attention` は 128 です。
+  held-out の AUROC はトークン数で **0–200: 0.904 / 200–400: 0.882 / 400–600: 0.866 /
+  600–: 0.730** と単調に低下します（[`docs/benchmarks.md`](docs/benchmarks.md) §6 の追試）。
+  学習済み属性は 600 トークンまでほぼ平坦（0.997）です。
+  **600 トークン超は n=33 で標準誤差が約 0.09**あり、そこでの急落は断定できません。
+  学習データの state は平均 134 トークン・p95 237 トークンです。
+- **位置に依存する質問は苦手です。** held-out の位置依存属性
+  「文末が問いかけで終わっているか」は **AUROC 0.688** にとどまり、
   意味を問う属性（意図推論 0.786、明示的要求 0.995）より明確に低く出ました。
-  学習データの state は平均 134 トークン・p95 237 トークンで、**300 トークンを超える state での
-  性能は測定していません**。
 - **エンコーディングは `[CLS] 指示 [SEP] 選択肢+マーカー [SEP] state [SEP]` の joint 方式**で、
   これは Laya と同じ配置です。state と質問を別系列にする方式も実装して A/B しましたが、
   未知スキーマへの意図推論が転移しませんでした（held-out AUROC 0.506 対 0.872）。
 - **温度を渡さない限り確率は較正されていません。**
 - **未実装**: act/escalate ヘッド（学習信号を定義できないので作らない）、
-  RLCD (Stage 3)、ONNX/TensorRT、HF Space デモ、HTTP API。
+  RLCD (Stage 3)、ONNX/TensorRT。
 - **FlashAttention-2 は使っていません。** この機械ではビルドできませんでした
   （CUDA Toolkit 13.1 と torch の 12.8 の不一致）。`sdpa` + 長さバケット化で動かしています。
 - **head 内に RoPE を入れていません。** backbone からコピーした attention 重みは
@@ -267,7 +277,7 @@ TypeSafe の利用規約（Master Customer Agreement 2.3(b)）が、同サービ
 uv venv --python 3.11
 uv sync --extra dev --extra bench
 cp .env.example .env            # ローカルLLM等のキーはすべて環境変数
-uv run pytest                   # 465 tests
+uv run pytest                   # 538 tests
 uv run ruff check .
 ```
 

@@ -28,6 +28,7 @@ import numpy as np
 import sokudan.config  # noqa: F401
 from sokudan.calibration.metrics import ordinal_mae, rps, spearman
 from sokudan.eval.baselines import floor_and_renormalise
+from sokudan.eval.bench_en import BenchItem as EnBenchItem
 from sokudan.eval.bench_ja import URGENCY_LEVELS, BenchItem
 from sokudan.schema.question import ScoreQuestion
 
@@ -45,11 +46,30 @@ VARIANTS: list[dict[str, Any]] = [
      "gold_map": {0: 0, 1: 1, 2: 3}},
 ]
 
+# The English mirror. Condition letters and `reverse` / `gold_map` semantics are
+# identical, so the two languages produce tables that line up row for row -- which is
+# the whole point of `bench_en`.
+from sokudan.eval.bench_en import URGENCY_LEVELS as EN_URGENCY  # noqa: E402
+
+EN_INSTRUCTIONS = "How urgent is this request?"
+EN_VARIANTS: list[dict[str, Any]] = [
+    {"name": "A original", "criteria": list(EN_URGENCY), "reverse": False},
+    {"name": "B reversed", "criteria": list(reversed(EN_URGENCY)), "reverse": True},
+    {"name": "C reworded (Low/Medium/High)", "criteria": ["Low", "Medium", "High"],
+     "reverse": False},
+    {"name": "D reworded, reversed", "criteria": ["High", "Medium", "Low"],
+     "reverse": True},
+    {"name": "E four levels", "reverse": False,
+     "criteria": ["Not urgent at all", "Not urgent", "Soon", "Work is blocked"],
+     "gold_map": {0: 0, 1: 1, 2: 3}},
+]
+
 
 class ScoreModel(Protocol):
     name: str
 
-    def score(self, items: list[BenchItem], criteria: list[str]) -> np.ndarray:
+    def score(self, items: list[Any], criteria: list[str],
+              instructions: str) -> np.ndarray:
         """Return `(N, len(criteria))` probabilities in the *presented* order."""
         ...
 
@@ -61,8 +81,9 @@ class LayaScorer:
         self.name = model_id
         self._agent = laya.load(model_id)
 
-    def score(self, items: list[BenchItem], criteria: list[str]) -> np.ndarray:
-        questions = {"urgency": {"type": "score", "instructions": INSTRUCTIONS,
+    def score(self, items: list[Any], criteria: list[str],
+              instructions: str) -> np.ndarray:
+        questions = {"urgency": {"type": "score", "instructions": instructions,
                                  "criteria": criteria}}
         rows = []
         for item in items:
@@ -80,8 +101,9 @@ class SokudanScorer:
         self.name = f"sokudan({checkpoint})"
         self._agent = pkg.load(checkpoint, temperatures=temperatures)
 
-    def score(self, items: list[BenchItem], criteria: list[str]) -> np.ndarray:
-        question = ScoreQuestion(instructions=INSTRUCTIONS, criteria=criteria)
+    def score(self, items: list[Any], criteria: list[str],
+              instructions: str) -> np.ndarray:
+        question = ScoreQuestion(instructions=instructions, criteria=criteria)
         rows = []
         for item in items:
             answer = self._agent.predict({"body": item.state},
@@ -105,11 +127,16 @@ def main() -> int:
     parser.add_argument("--model", required=True, help="laya:<id> or sokudan:<checkpoint>")
     parser.add_argument("--temperatures", default=None)
     parser.add_argument("--bench", default="data/bench_ja.jsonl")
+    parser.add_argument("--lang", choices=("ja", "en"), default="ja",
+                        help="which schema set to probe; en mirrors ja condition for condition")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
+    variants = EN_VARIANTS if args.lang == "en" else VARIANTS
+    instructions = EN_INSTRUCTIONS if args.lang == "en" else INSTRUCTIONS
+    item_cls = EnBenchItem if args.lang == "en" else BenchItem
     items = [
-        BenchItem(**json.loads(line))
+        item_cls(**json.loads(line))
         for line in Path(args.bench).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
@@ -122,9 +149,9 @@ def main() -> int:
     print("-" * 100)
 
     rows: list[dict[str, Any]] = []
-    for variant in VARIANTS:
+    for variant in variants:
         criteria = variant["criteria"]
-        probs = model.score(items, criteria)
+        probs = model.score(items, criteria, instructions)
         presented_counts = np.bincount(probs.argmax(axis=1), minlength=len(criteria))
 
         # Canonical order, for the label-aligned metrics.

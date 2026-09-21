@@ -97,6 +97,16 @@ STYLES = [
 ]
 LENGTHS = [("短", "100〜180文字"), ("中", "200〜320文字"), ("長", "350〜550文字")]
 
+# For the long-state stress test. `docs/benchmarks.md` records that the training
+# states average 134 tokens against a `local_attention` window of 128, so the
+# mechanism §6.1 originally worried about never had a chance to fire. These buckets
+# push well past the window to find the length where it does.
+LONG_LENGTHS = [
+    ("長", "600〜900文字"),
+    ("非常に長い", "1000〜1400文字"),
+    ("極めて長い", "1600〜2200文字"),
+]
+
 
 CATALOG: list[Domain] = [
     Domain(
@@ -886,6 +896,336 @@ CATALOG: list[Domain] = [
             ),
         ],
     ),
+    # ----------------------------------------------------------------------
+    # v0.2 corpus additions, 2026-09-22 (21 -> 30 domains).
+    #
+    # The existing twenty-one lean towards a complaint or a request. These nine add
+    # writing where the sender is *not* aggrieved -- a handover, a schedule note, a
+    # recommendation -- so that the intent attributes have to be read off neutral and
+    # positive text too, not only off friction. `docs/benchmarks.md` §6 shows the
+    # implicit tier is the one that transfers worst, and every implicit attribute so
+    # far has been trained almost entirely on documents where something went wrong.
+    #
+    # No cancellation, contract-termination, switching or competitor material: the
+    # bench_ja boolean stays out of the training distribution, and
+    # scripts/check_catalog_leak.py fails the build if any of it appears.
+    #
+    # Score levels are K = 5, 3, 4, 6, 2, 7, 3, 4, 5 across the nine, keeping every K
+    # the dynamic head has seen.
+    Domain(
+        name="handover_note",
+        document="担当を引き継ぐときの申し送りメモ",
+        contexts=["経理", "採用", "店舗運営", "保守", "編集", "物流"],
+        attributes=[
+            Attribute(
+                name="handover_completeness", kind="score",
+                instructions="引き継ぎ内容の網羅度は",
+                labels=[
+                    "ほぼ書かれていない", "要点のみ", "手順まで",
+                    "例外対応まで", "判断基準まで",
+                ],
+                behaviour=[
+                    "何を引き継ぐかの一覧だけで中身がないことが読み取れるようにする",
+                    "日常の要点だけが書かれていることが読み取れるようにする",
+                    "手順が順を追って書かれていることが読み取れるようにする",
+                    "例外が起きたときの対応まで書かれていることが読み取れるようにする",
+                    "なぜそう判断するのかの基準まで書かれていることが読み取れるようにする",
+                ],
+                weights=[0.12, 0.22, 0.28, 0.22, 0.16],
+            ),
+            Attribute(
+                name="successor_named", kind="bool",
+                instructions="後任が誰かが書かれているか",
+                labels=["書かれていない", "書かれている"],
+                behaviour=[
+                    "誰が引き継ぐかには触れず、作業内容だけを書く",
+                    "後任にあたる人物が具体的に登場するように書く",
+                ],
+                weights=[0.45, 0.55],
+            ),
+        ],
+    ),
+    Domain(
+        name="recommendation_letter",
+        document="推薦状・紹介状",
+        contexts=["大学院進学", "転職", "受賞推薦", "取引先の紹介", "資格申請"],
+        attributes=[
+            Attribute(
+                name="endorsement_strength", kind="score",
+                instructions="推薦の強さは",
+                labels=["留保が目立つ", "条件付き", "強く推す"],
+                behaviour=[
+                    "良い点を挙げつつも歯切れの悪さが残る書き方にする",
+                    "ある条件のもとでなら勧められる、という書き方にする",
+                    "迷いなく強く勧めていることが読み取れるようにする",
+                ],
+                weights=[0.22, 0.38, 0.40],
+            ),
+            Attribute(
+                name="firsthand_knowledge", kind="choice",
+                instructions="書き手と対象者の関係は",
+                labels=["直属の上司", "同僚", "指導教員", "取引の相手方", "面識が浅い"],
+                descriptions={
+                    "直属の上司": "日々の仕事を直接見ていた",
+                    "同僚": "同じ立場で働いていた",
+                    "指導教員": "学業や研究を指導していた",
+                    "取引の相手方": "仕事上のやり取りがあった",
+                    "面識が浅い": "断片的にしか知らない",
+                },
+                behaviour=[
+                    "日々の仕事を直接見ていた立場から書く",
+                    "同じ立場で働いていた者として書く",
+                    "学業や研究を指導した立場から書く",
+                    "仕事上のやり取りがあった相手として書く",
+                    "断片的にしか知らないことが読み取れるように書く",
+                ],
+                weights=[0.28, 0.22, 0.20, 0.18, 0.12],
+            ),
+        ],
+    ),
+    Domain(
+        name="event_logistics",
+        document="催しの運営連絡",
+        contexts=["社内研修", "展示会", "地域の祭り", "学会", "採用説明会", "撮影"],
+        attributes=[
+            Attribute(
+                name="logistics_stage", kind="choice",
+                instructions="この連絡が扱っている段取りの段階は",
+                labels=["日程の打診", "会場と備品", "当日の進行", "参加者への案内"],
+                descriptions={
+                    "日程の打診": "いつやるかの相談",
+                    "会場と備品": "場所とものの手配",
+                    "当日の進行": "時間割と担当",
+                    "参加者への案内": "来る人への連絡",
+                },
+                behaviour=[
+                    "いつやるかの相談を中心に書く",
+                    "場所とものの手配を中心に書く",
+                    "当日の時間割と担当を中心に書く",
+                    "来る人への案内を中心に書く",
+                ],
+                weights=[0.24, 0.28, 0.26, 0.22],
+            ),
+            Attribute(
+                name="headcount_certainty", kind="score",
+                instructions="参加人数の確からしさは",
+                labels=["まったく未定", "概算", "確定に近い", "確定済み"],
+                behaviour=[
+                    "人数の見当がまったくついていないことが読み取れるようにする",
+                    "おおよその人数だけが分かっていることが読み取れるようにする",
+                    "ほぼ固まっているが変動の余地があることが読み取れるようにする",
+                    "人数が確定していることが読み取れるようにする",
+                ],
+                weights=[0.18, 0.32, 0.28, 0.22],
+            ),
+        ],
+    ),
+    Domain(
+        name="research_note",
+        document="調査・実験の記録メモ",
+        contexts=["市場調査", "材料試験", "ユーザ調査", "気象観測", "医薬の安定性試験", "在庫分析"],
+        attributes=[
+            Attribute(
+                name="evidence_strength", kind="score",
+                instructions="結論を支える根拠の強さは",
+                labels=[
+                    "印象のみ", "事例が1件", "少数の事例",
+                    "反復して確認", "対照群あり", "再現済み",
+                ],
+                behaviour=[
+                    "数値も事例もなく印象だけで書かれているようにする",
+                    "1 件の事例だけを根拠にしていることが読み取れるようにする",
+                    "数件の事例を並べていることが読み取れるようにする",
+                    "同じことを何度か確認したことが読み取れるようにする",
+                    "比較対象を置いて確かめたことが読み取れるようにする",
+                    "別の条件でも同じ結果が出たことが読み取れるようにする",
+                ],
+                weights=[0.12, 0.16, 0.20, 0.22, 0.18, 0.12],
+            ),
+            Attribute(
+                name="contradicts_expectation", kind="bool",
+                instructions="事前の想定と食い違う結果が出ているか",
+                labels=["想定どおり", "想定と食い違う"],
+                behaviour=[
+                    "見込みどおりの結果だったことが読み取れるようにする",
+                    "予想と違う結果が出て戸惑っていることが読み取れるようにする",
+                ],
+                weights=[0.55, 0.45],
+            ),
+        ],
+    ),
+    Domain(
+        name="volunteer_coordination",
+        document="ボランティア・有志活動の連絡",
+        contexts=["清掃活動", "炊き出し", "翻訳の手伝い", "イベント運営", "見守り", "資料整理"],
+        attributes=[
+            Attribute(
+                name="commitment_level", kind="score",
+                instructions="書き手が引き受けている度合いは",
+                labels=["様子見", "引き受ける"],
+                behaviour=[
+                    "参加するかどうか決めかねていることが読み取れるようにする",
+                    "引き受けることがはっきり読み取れるようにする",
+                ],
+                weights=[0.40, 0.60],
+            ),
+            Attribute(
+                name="coordination_topic", kind="choice",
+                instructions="この連絡の用件は",
+                labels=["人手の募集", "持ち物の確認", "役割の割り振り", "日程の変更", "お礼と報告"],
+                descriptions={
+                    "人手の募集": "手伝える人を探す",
+                    "持ち物の確認": "何を持っていくかの確認",
+                    "役割の割り振り": "誰が何をするかの決め",
+                    "日程の変更": "予定のずらし",
+                    "お礼と報告": "終わったあとの連絡",
+                },
+                behaviour=[
+                    "手伝える人を探すことを中心に書く",
+                    "何を持っていくかの確認を中心に書く",
+                    "誰が何をするかの割り振りを中心に書く",
+                    "予定をずらす連絡を中心に書く",
+                    "終わったあとのお礼と報告を中心に書く",
+                ],
+                weights=[0.24, 0.16, 0.22, 0.18, 0.20],
+            ),
+        ],
+    ),
+    Domain(
+        name="maintenance_ticket",
+        document="設備保守の作業票",
+        contexts=["空調", "エレベーター", "冷蔵設備", "電気設備", "通信機器", "消防設備"],
+        attributes=[
+            Attribute(
+                name="work_stage", kind="score",
+                instructions="作業の進み具合は",
+                labels=[
+                    "受付のみ", "現地確認待ち", "原因調査中", "部品待ち",
+                    "作業中", "経過観察", "完了",
+                ],
+                behaviour=[
+                    "受け付けただけで何も始まっていないことが読み取れるようにする",
+                    "現地を見に行く前の段階だと読み取れるようにする",
+                    "原因を探している最中だと読み取れるようにする",
+                    "ものの到着を待っている状態だと読み取れるようにする",
+                    "実際に手を動かしている最中だと読み取れるようにする",
+                    "直ったあと様子を見ている段階だと読み取れるようにする",
+                    "作業が終わっていることが読み取れるようにする",
+                ],
+                weights=[0.12, 0.14, 0.16, 0.14, 0.18, 0.12, 0.14],
+            ),
+            Attribute(
+                name="safety_concern", kind="bool",
+                instructions="安全上の懸念に触れているか",
+                labels=["触れていない", "触れている"],
+                behaviour=[
+                    "機能の不具合だけを書き、人の安全には触れない",
+                    "人に危害が及びうる状況であることが読み取れるようにする",
+                ],
+                weights=[0.62, 0.38],
+            ),
+        ],
+    ),
+    Domain(
+        name="peer_review_comment",
+        document="投稿原稿への査読コメント",
+        contexts=["学術論文", "技術記事", "社内白書", "書籍の原稿", "提案書"],
+        attributes=[
+            Attribute(
+                name="review_verdict", kind="score",
+                instructions="査読者の判定は",
+                labels=["不採録", "大幅修正", "採録"],
+                behaviour=[
+                    "この原稿は通せないという判断が読み取れるようにする",
+                    "直せば通りうるが手直しが大きいことが読み取れるようにする",
+                    "このまま、または軽微な直しで通せることが読み取れるようにする",
+                ],
+                weights=[0.24, 0.46, 0.30],
+            ),
+            Attribute(
+                name="comment_focus", kind="choice",
+                instructions="指摘の中心は",
+                labels=["主張の妥当性", "方法の妥当性", "記述の明瞭さ", "先行事例の扱い", "図表"],
+                descriptions={
+                    "主張の妥当性": "言っていること自体の正しさ",
+                    "方法の妥当性": "やり方の適切さ",
+                    "記述の明瞭さ": "読んで分かるかどうか",
+                    "先行事例の扱い": "既にあるものへの言及",
+                    "図表": "図表の作りと説明",
+                },
+                behaviour=[
+                    "言っていること自体の正しさを中心に指摘する",
+                    "やり方の適切さを中心に指摘する",
+                    "読んで分かるかどうかを中心に指摘する",
+                    "既にあるものへの言及の不足を中心に指摘する",
+                    "図表の作りと説明を中心に指摘する",
+                ],
+                weights=[0.26, 0.24, 0.22, 0.16, 0.12],
+            ),
+        ],
+    ),
+    Domain(
+        name="travel_request",
+        document="出張・外出の申請と報告",
+        contexts=["国内出張", "海外出張", "現場立ち会い", "展示会視察", "研修参加"],
+        attributes=[
+            Attribute(
+                name="justification_strength", kind="score",
+                instructions="行く必要性の説明の強さは",
+                labels=["理由が曖昧", "一般的な理由", "具体的な理由", "行かないと進まない"],
+                behaviour=[
+                    "なぜ行くのかがはっきりしない書き方にする",
+                    "ありがちな理由が並んでいるだけの書き方にする",
+                    "具体的な用件が挙がっている書き方にする",
+                    "行かなければ仕事が進まないことが読み取れるようにする",
+                ],
+                weights=[0.16, 0.28, 0.34, 0.22],
+            ),
+            Attribute(
+                name="cost_itemised", kind="bool",
+                instructions="費用の内訳が書かれているか",
+                labels=["書かれていない", "書かれている"],
+                behaviour=[
+                    "費用には触れないか、総額だけを書く",
+                    "交通費・宿泊費などの内訳が分かるように書く",
+                ],
+                weights=[0.48, 0.52],
+            ),
+        ],
+    ),
+    Domain(
+        name="community_notice",
+        document="町内会・管理組合の回覧",
+        contexts=["ごみ出し", "防災訓練", "共用設備の工事", "会費", "駐輪", "夜間の騒音"],
+        attributes=[
+            Attribute(
+                name="compliance_expectation", kind="score",
+                instructions="住民に求めている対応の強さは",
+                labels=[
+                    "知らせるだけ", "協力のお願い", "遵守の要請",
+                    "違反時の措置に言及", "強い是正要求",
+                ],
+                behaviour=[
+                    "知らせるだけで何も求めない書き方にする",
+                    "できれば協力してほしい、という書き方にする",
+                    "守ってほしいとはっきり求める書き方にする",
+                    "守られない場合の措置にも触れる書き方にする",
+                    "現状を強く改めるよう求める書き方にする",
+                ],
+                weights=[0.20, 0.26, 0.24, 0.18, 0.12],
+            ),
+            Attribute(
+                name="names_specific_household", kind="bool",
+                instructions="特定の世帯や個人を名指ししているか",
+                labels=["名指ししていない", "名指ししている"],
+                behaviour=[
+                    "全戸に向けた一般的な呼びかけとして書く",
+                    "特定の部屋や世帯を指していることが読み取れるように書く（架空の表記で）",
+                ],
+                weights=[0.70, 0.30],
+            ),
+        ],
+    ),
 ]
 
 
@@ -980,6 +1320,7 @@ def build_intent_prompt(
     chosen: dict[str, int],
     intents: list[tuple[object, int]],
     rng: random.Random,
+    lengths: list[tuple[str, str]] | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Prompt for one document, conditioned on domain labels *and* intent labels.
 
@@ -992,7 +1333,7 @@ def build_intent_prompt(
     length correlation afterwards rather than assuming this worked.
     """
     style = rng.choice(STYLES)
-    length_name, length_hint = rng.choice(LENGTHS)
+    length_name, length_hint = rng.choice(lengths or LENGTHS)
     context = rng.choice(domain.contexts)
 
     domain_conditions = [

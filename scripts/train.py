@@ -127,6 +127,8 @@ def main() -> int:
     parser.add_argument("--max-state-tokens", type=int, default=1024)
     parser.add_argument("--ordinal-weight", type=float, default=1.0)
     parser.add_argument("--limit", type=int, default=None, help="truncate the train split")
+    parser.add_argument("--no-ordinal", action="store_true",
+                        help="ablation: score rows use the plain softmax")
     parser.add_argument("--encoding", choices=("separate", "joint"),
                         default="separate")
     parser.add_argument("--device", default="cuda")
@@ -144,7 +146,9 @@ def main() -> int:
     if args.encoding == "joint":
         from sokudan.model.joint import SokudanJointModel
 
-        model = SokudanJointModel.from_pretrained_backbone()
+        model = SokudanJointModel.from_pretrained_backbone(
+            use_ordinal=not args.no_ordinal
+        )
     else:
         model = SokudanModel.from_pretrained_backbone(n_head_layers=args.head_layers)
 

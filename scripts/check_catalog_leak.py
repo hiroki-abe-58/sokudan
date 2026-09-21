@@ -20,7 +20,7 @@ A leak in any of those would be invisible to a row-level check and would still p
 reported afterwards. So this runs over the catalogue objects, before generation,
 and it fails the build rather than reporting a count.
 
-The ban covers questions, not bodies. `docs/benchmarks.md` §5 has the
+The ban covers questions, not bodies. `docs/benchmarks.md` §5 §3.2 has the
 reasoning: 2.7% of the existing training documents already use this vocabulary with
 no label attached, and stripping it would leave a model that has never seen those
 tokens in context -- which is not protection from `bench_ja`, it is a handicap on it.

@@ -1,0 +1,52 @@
+{
+  "generated_at": "2026-09-22T01:47:48+0900",
+  "generator_model": "qwen3:30b-a3b-instruct-2507-q4_K_M",
+  "temperature": 0.9,
+  "seed": 20260922,
+  "requested": 300,
+  "kept": 290,
+  "elapsed_s": 308.2,
+  "rejections": {
+    "leaked:Soon": 58,
+    "leaked:Other": 51,
+    "leaked:Billing": 43,
+    "leaked:urgent": 2,
+    "leaked:Technical": 2,
+    "leaked:Sales": 1,
+    "leaked:urgency": 1
+  },
+  "verification_failures": {},
+  "verification_agreement_all_three": 0.5172,
+  "verification_agreement_per_field": {
+    "department": 0.9034,
+    "urgency": 0.6172,
+    "churn": 0.9345,
+    "churn_unclear": 0.0345
+  },
+  "gold_counts": {
+    "department": {
+      "Other": 48,
+      "Technical": 96,
+      "Sales": 56,
+      "Billing": 90
+    },
+    "urgency": {
+      "Soon": 141,
+      "Not urgent": 88,
+      "Work is blocked": 61
+    },
+    "churn_true": 92,
+    "churn_false": 198
+  },
+  "departments": [
+    "Billing",
+    "Technical",
+    "Sales",
+    "Other"
+  ],
+  "urgency_levels": [
+    "Not urgent",
+    "Soon",
+    "Work is blocked"
+  ]
+}

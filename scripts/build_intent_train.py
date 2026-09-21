@@ -278,8 +278,31 @@ def derived_views(
     return balanced[:budget]
 
 
+def _finish(other, kept_domain, kept_intent, kept_derived, groups, budget,
+            before, negation_cap, rng):
+    kept = kept_domain + kept_intent + kept_derived
+    out = other + kept
+    rng.shuffle(out)
+    report = {
+        "applied": True,
+        "target": round(len(kept) / max(len(out), 1), 4),
+        "share_before": round(before, 4),
+        "share_after": round(len(kept) / max(len(out), 1), 4),
+        "bool_before": sum(len(v) for v in groups.values()),
+        "bool_after": len(kept),
+        "budget": budget,
+        "intent": {"before": len(groups["intent"]), "after": len(kept_intent)},
+        "negation_cap": negation_cap,
+        "negation_after": sum(1 for r in kept_intent if r["negation"]),
+        "derived": {"before": len(groups["derived"]), "after": len(kept_derived)},
+        "domain_bool": {"before": len(groups["domain"]), "after": len(kept_domain)},
+    }
+    return out, report
+
+
 def enforce_bool_share(
-    rows: list[dict[str, Any]], target: float, rng: random.Random
+    rows: list[dict[str, Any]], target: float, rng: random.Random,
+    *, keep_derived: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Downsample boolean views until they are `target` of the training set.
 
@@ -316,6 +339,16 @@ def enforce_bool_share(
     kept_domain = groups["domain"]
     remaining = budget - len(kept_domain)
 
+    if keep_derived:
+        # Ablation (c). Derived booleans are normally the first thing dropped, so
+        # asking whether they help means protecting them and letting the intent views
+        # absorb the cut instead -- same total budget, one variable moved.
+        take = min(len(groups["derived"]), max(remaining // 3, 0))
+        rng.shuffle(groups["derived"])
+        kept_derived_first = groups["derived"][:take]
+        remaining -= len(kept_derived_first)
+        groups = {**groups, "derived": kept_derived_first}
+
     # The negation cap is a fraction of the *final* boolean count, so it has to be
     # applied here rather than when the views were made: thinning shrinks the
     # denominator, and a 12% share before downsampling came out at 22% after.
@@ -342,27 +375,13 @@ def enforce_bool_share(
     remaining -= len(kept_intent)
 
     kept_derived = groups["derived"]
-    if remaining < len(kept_derived):
+    if not keep_derived and remaining < len(kept_derived):
         rng.shuffle(kept_derived)
         kept_derived = kept_derived[: max(remaining, 0)]
 
-    kept = kept_domain + kept_intent + kept_derived
-    out = other + kept
-    rng.shuffle(out)
-    report = {
-        "applied": True,
-        "target": target,
-        "share_before": round(before, 4),
-        "share_after": round(len(kept) / len(out), 4),
-        "bool_before": len(boolean),
-        "bool_after": len(kept),
-        "intent": {"before": len(groups["intent"]), "after": len(kept_intent)},
-        "negation_cap": negation_cap,
-        "negation_after": sum(1 for r in kept_intent if r["negation"]),
-        "derived": {"before": len(groups["derived"]), "after": len(kept_derived)},
-        "domain_bool": {"before": len(groups["domain"]), "after": len(kept_domain)},
-    }
-    return out, report
+    return _finish(other, kept_domain, kept_intent, kept_derived, groups, budget,
+                   before, negation_cap, rng)
+
 
 
 def row_leak_check(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -418,13 +437,25 @@ def main() -> int:
     parser.add_argument("--domain-variants", type=int, default=4)
     parser.add_argument("--derived-ratio", type=float, default=0.5,
                         help="derived boolean views as a fraction of new ones (§8.1)")
+    parser.add_argument("--keep-derived", action="store_true",
+                        help="ablation: protect derived booleans from the bool-share cut")
+    parser.add_argument("--no-augment", action="store_true",
+                        help="ablation: disable every schema randomisation")
     parser.add_argument("--bool-share", type=float, default=None,
                         help="downsample boolean views to this fraction of training (e.g. 0.63)")
     parser.add_argument("--seed", type=int, default=20260921)
     args = parser.parse_args()
 
     rng = random.Random(args.seed)
-    config = AugmentConfig()
+    config = (
+        # Ablation (b): every schema transform off. `variant` still counts up, so the
+        # view budget is unchanged and only the randomisation differs -- otherwise the
+        # comparison would confound augmentation with dataset size.
+        AugmentConfig(shuffle_options=0.0, reverse_score=0.0, vary_surface=0.0,
+                      add_distractors=0.0, drop_options=0.0,
+                      paraphrase_instructions=0.0, vary_bool_labels=0.0)
+        if args.no_augment else AugmentConfig()
+    )
     documents = load(Path(args.docs))
     print(f"{len(documents)} documents "
           f"({Counter(d['split'] for d in documents)})")
@@ -497,7 +528,8 @@ def main() -> int:
     train_rows.extend(derived)
 
     train_rows, share_report = (
-        enforce_bool_share(train_rows, args.bool_share, rng)
+        enforce_bool_share(train_rows, args.bool_share, rng,
+                           keep_derived=args.keep_derived)
         if args.bool_share else (train_rows, {"applied": False})
     )
     if share_report.get("applied"):
@@ -547,6 +579,7 @@ def main() -> int:
         "option_counts": dict(sorted(Counter(r["n_options"] for r in train_rows).items())),
         "document_overlap_between_splits": sorted(train_ids & val_ids),
         "bool_share": share_report,
+        "no_augment": args.no_augment,
         "bench_ja_leakage": leak,
     }
     (out_dir / "manifest_v2.json").write_text(
