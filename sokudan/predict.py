@@ -15,6 +15,7 @@ are the head's logits read directly, not a model's own report of its confidence.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -198,18 +199,72 @@ class Agent:
         }
 
 
+def _resolve_checkpoint(checkpoint: str | Path) -> tuple[dict, Path | None]:
+    """Accept a `.pt` file, a directory of safetensors, or a Hub repo id.
+
+    The published weights are safetensors in a repository, and the training script
+    writes a `.pt`. Both have to load through one entry point, or the Quickstart in
+    the README describes something the package cannot do.
+
+    Returns the state blob and, when the checkpoint came from a directory or the Hub,
+    the directory it came from -- so a sibling `temperatures.json` can be found.
+    """
+    from pathlib import Path as _Path
+
+    path = _Path(str(checkpoint))
+
+    if path.is_file():
+        return torch.load(str(path), map_location="cpu", weights_only=False), path.parent
+
+    if path.is_dir():
+        return _load_directory(path), path
+
+    # Not on disk: treat it as `repo_id` or `repo_id@revision`.
+    repo_id, _, revision = str(checkpoint).partition("@")
+    if "/" not in repo_id:
+        raise FileNotFoundError(
+            f"{checkpoint!r} is neither a file, a directory, nor a Hub repo id "
+            f"(expected something like 'GeneLab/sokudan-ja-310m')"
+        )
+    from huggingface_hub import snapshot_download
+
+    local = _Path(snapshot_download(
+        repo_id, revision=revision or None,
+        allow_patterns=["*.json", "*.safetensors", "tokenizer*"],
+    ))
+    return _load_directory(local), local
+
+
+def _load_directory(directory: Path) -> dict:
+    """Read `model.safetensors` + `config.json` into the shape `torch.load` returns."""
+    from safetensors.torch import load_file
+
+    weights = directory / "model.safetensors"
+    config_path = directory / "config.json"
+    if not weights.exists():
+        raise FileNotFoundError(f"{directory} has no model.safetensors")
+    config = (
+        json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+    )
+    return {"state_dict": load_file(str(weights)), "config": config}
+
+
 def load(
     checkpoint: str | Path,
     *,
     device: str | None = None,
     temperatures: str | Path | dict[tuple[str, int], float] | None = None,
 ) -> Agent:
-    """Load a checkpoint written by `scripts/train.py`.
+    """Load a checkpoint, from disk or from the Hub.
 
     Args:
-        checkpoint: path to `model.pt`.
+        checkpoint: a local `model.pt`, a local directory holding
+            `model.safetensors` + `config.json`, or a Hub repo id such as
+            `GeneLab/sokudan-ja-310m`. A repo id may carry a revision after `@`
+            (`GeneLab/sokudan-ja-310m@seed1`).
         device: defaults to cuda when available.
-        temperatures: a `temperatures.json` from `scripts/calibrate.py`, or a dict.
+        temperatures: a `temperatures.json` from `scripts/calibrate.py`, a dict, or
+            `"temperatures.json"` to take the one shipped beside a Hub checkpoint.
             Without it the model reports its raw head probabilities, which are
             **not calibrated** -- see the README's Limits section.
     """
@@ -221,7 +276,18 @@ def load(
     from sokudan.model.sokudan import SokudanModel
 
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    blob = torch.load(str(checkpoint), map_location="cpu", weights_only=False)
+    blob, resolved_dir = _resolve_checkpoint(checkpoint)
+    if (
+        resolved_dir is not None
+        and isinstance(temperatures, (str, Path))
+        and not Path(temperatures).exists()
+        and Path(temperatures).name == str(temperatures)
+    ):
+        # `temperatures="temperatures.json"` beside a Hub checkpoint: resolve it to
+        # the file that came down with the weights rather than the working directory.
+        candidate = resolved_dir / str(temperatures)
+        if candidate.exists():
+            temperatures = candidate
     config = blob.get("config", {})
     backbone_id = config.get("backbone", BACKBONE_MODEL_ID)
     encoding = config.get("encoding", "separate")

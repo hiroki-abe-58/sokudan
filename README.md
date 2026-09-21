@@ -6,7 +6,7 @@
 
 生成しないので、パースするものがなく、ハルシネーションする余地もありません。
 
-- モデル: `sokudan-ja-310m`（338M / バックボーン [`sbintuitions/modernbert-ja-310m`](https://huggingface.co/sbintuitions/modernbert-ja-310m), MIT）
+- モデル: `sokudan-ja-310m`（314.6M / バックボーン [`sbintuitions/modernbert-ja-310m`](https://huggingface.co/sbintuitions/modernbert-ja-310m), MIT）
 - ライセンス: Apache-2.0
 - 開発環境: RTX 5090 (Blackwell, sm_120) 1枚
 
@@ -80,7 +80,7 @@ pip install -e .
 ```python
 import sokudan
 
-agent = sokudan.load("runs/s0/model.pt")            # 学習済みチェックポイント
+agent = sokudan.load("GeneLab/sokudan-ja-310m")     # または手元の runs/.../model.pt
 result = agent.predict(
     {"body": "先月の請求で同じ金額が二回引き落とされています。至急ご確認ください。"},
     {
@@ -108,10 +108,19 @@ print(result["answers"]["department"]["choice"])
 較正済みの確率がほしい場合は Stage 2 の温度を渡してください:
 
 ```python
-agent = sokudan.load("runs/s0/model.pt", temperatures="runs/s0/temperatures.json")
+agent = sokudan.load("GeneLab/sokudan-ja-310m",
+                     temperatures="temperatures.json")
 ```
 
 **温度を渡さない場合、確率は較正されていません。** 下の Limits を読んでください。
+**ただし同梱の温度は `score` の RPS を悪化させます**（0.090 → 0.149）。
+`choice` と `bool` だけに使うか、自前の検証セットで再フィットしてください。
+
+他のシードの重みは revision で取れます:
+
+```python
+agent = sokudan.load("GeneLab/sokudan-ja-310m@seed1")
+```
 
 ---
 
@@ -177,7 +186,7 @@ train / eval / serve はすべてここを import します。
 ## ベンチマーク
 
 - [`docs/baseline_ja.md`](docs/baseline_ja.md) — 既存モデルの日本語実測（`bench_ja` 300件）
-- `sokudan` 自体のベンチマークは v0.1 公開時に追加します
+- [`docs/benchmarks.md`](docs/benchmarks.md) — **`sokudan` v0.1 の全指標**（3 シード、較正前後、state 差し替え、位置バイアス）
 - [`docs/gate_a.md`](docs/gate_a.md) — 環境とスループットの実測
 - [`docs/licenses.md`](docs/licenses.md) — 採用したもののライセンス一次確認
 
@@ -214,13 +223,13 @@ train / eval / serve はすべてここを import します。
 
   **「ビュー」を「例」と読み替えないでください。** 同じ文書・同じラベルを
   スキーマ表記だけ変えて複数回見せたものを含みます。独立な事例数は「ペア」の段です。
+  生成者は単一モデル（`qwen3:30b-a3b-instruct-2507-q4_K_M`）なので、
+  その語彙・言い回しの癖が学習データ全体に乗っています。
+  JGLUE などの実データは、ライセンスの一次確認に時間を要するため採用していません。
 - **`bench_ja` と同じドメインの文書が学習データに含まれます**（事業者への問い合わせフォームの
   自由記述）。`bench_ja` が測るのは**未知スキーマ**への汎化であり、未知ドメインへの汎化では
   ありません。`bench_ja` の 3 スキーマ（部署ルーティング / 緊急度 / 解約示唆）は
   学習に一度も出していません。
-  生成者は単一モデル（`qwen3:30b-a3b-instruct-2507-q4_K_M`）なので、
-  その語彙・言い回しの癖が学習データ全体に乗っています。
-  JGLUE などの実データは、ライセンスの一次確認に時間を要するため当日は採用していません。
 - **`bench_ja` も合成データです。** 生成に使ったモデルと LLM-as-classifier ベースラインは
   同一モデルなので、そのベースラインは公平な比較対象ではなく上限の目安です。
 - **レイテンシは質問数に比例します。** v0.1 は joint encoding で、**質問ごとに state を

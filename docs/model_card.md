@@ -28,7 +28,7 @@ base_model: sbintuitions/modernbert-ja-310m
 パースするものがなく、ハルシネーションする余地もありません。
 
 - バックボーン: [`sbintuitions/modernbert-ja-310m`](https://huggingface.co/sbintuitions/modernbert-ja-310m)（MIT）
-- 総パラメータ: 338,217,986（backbone 314.6M + decision head 23.6M + ordinal head 1,538）
+- 総パラメータ: 314,614,274（backbone 314,611,968 + scorer 768 + ordinal head 1,538）。v0.1 は joint encoding で decision head を持ちません
 - ライセンス: Apache-2.0
 - コード / 設計: https://github.com/hiroki-abe-58/sokudan
 
@@ -308,7 +308,7 @@ Laya は 5 条件すべてで第 1 選択肢が 300 件中 **0〜1 件**しか�
 ### やってはいけない使い方
 
 - **人間の最終判断を置き換える用途**（採用、与信、懲戒、医療、法務の決定）には使わないでください。
-  合成データのみで学習された 338M のモデルです。
+  合成データのみで学習された 314.6M のモデルです。
 - 確率を**そのまま業務上の期待値計算に入れる**前に、自分のデータで較正し直してください。
 
 ---

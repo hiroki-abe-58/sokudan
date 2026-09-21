@@ -238,3 +238,57 @@ def test_the_state_reaches_the_model_unchanged(client):
     # must not sort, dedupe or otherwise tidy it on the way through.
     assert list(seen_questions["department"]["criteria"]) == \
         list(BENCH_QUESTIONS["department"]["criteria"])
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint resolution. The README's Quickstart names a Hub repo id, so the
+# package has to accept one -- a README describing behaviour the code lacks is the
+# same class of error as an unmeasured number in the model card.
+# ---------------------------------------------------------------------------
+
+
+def test_a_directory_of_safetensors_loads_like_a_pt_file(tmp_path) -> None:
+    import json as _json
+
+    import torch
+    from safetensors.torch import save_file
+
+    from sokudan.predict import _resolve_checkpoint
+
+    save_file({"scorer.weight": torch.zeros(1, 8)}, str(tmp_path / "model.safetensors"))
+    (tmp_path / "config.json").write_text(
+        _json.dumps({"encoding": "joint", "backbone": "b"}), encoding="utf-8"
+    )
+
+    blob, directory = _resolve_checkpoint(tmp_path)
+    assert "scorer.weight" in blob["state_dict"]
+    assert blob["config"]["encoding"] == "joint"
+    assert directory == tmp_path
+
+
+def test_a_pt_file_still_loads_and_reports_its_directory(tmp_path) -> None:
+    import torch
+
+    from sokudan.predict import _resolve_checkpoint
+
+    path = tmp_path / "model.pt"
+    torch.save({"state_dict": {"scorer.weight": torch.zeros(1, 8)},
+                "config": {"encoding": "separate"}}, path)
+
+    blob, directory = _resolve_checkpoint(path)
+    assert blob["config"]["encoding"] == "separate"
+    assert directory == tmp_path
+
+
+def test_a_name_that_is_neither_a_path_nor_a_repo_id_is_rejected() -> None:
+    from sokudan.predict import _resolve_checkpoint
+
+    with pytest.raises(FileNotFoundError, match="Hub repo id"):
+        _resolve_checkpoint("not-a-path-and-not-a-repo")
+
+
+def test_a_directory_without_weights_says_so(tmp_path) -> None:
+    from sokudan.predict import _resolve_checkpoint
+
+    with pytest.raises(FileNotFoundError, match="model.safetensors"):
+        _resolve_checkpoint(tmp_path)
