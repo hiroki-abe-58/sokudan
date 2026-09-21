@@ -274,8 +274,12 @@ uv run ruff check .
 再現手順（`bench_ja` の生成からベースライン実測まで）は
 [`docs/baseline_ja.md`](docs/baseline_ja.md) の冒頭にあります。
 
-コード中の docstring にある `SOKUDAN_SPEC.md §…` は内部の設計仕様書への参照です。
-**その仕様書はこのリポジトリには含めていません**（節番号だけが残っています）。
+コード中の docstring にある `SOKUDAN_SPEC.md §…` は
+[`SOKUDAN_SPEC.md`](SOKUDAN_SPEC.md) への参照です。
+**これは 2026-09-20 のスプリント開始時点の設計仕様であり、現在の実装とは一致しません**
+（§6.1 / §6.2 の separate encoding は撤回済み）。
+何をどう決めて、どこで間違えたかを追えるように残してあります。
+現在の正本は [`docs/architecture.md`](docs/architecture.md) です。
 
 ## ライセンス
 
