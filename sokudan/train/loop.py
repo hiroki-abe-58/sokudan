@@ -33,8 +33,15 @@ from sokudan.calibration.metrics import (
     ordinal_mae,
     rps,
 )
-from sokudan.model.sokudan import SokudanModel
-from sokudan.train.dataset import Batch, Collator, Example, length_bucketed_batches
+from sokudan.model.sokudan import SokudanModel, SokudanOutput
+from sokudan.train.dataset import (
+    Batch,
+    Collator,
+    Example,
+    JointBatch,
+    JointCollator,
+    length_bucketed_batches,
+)
 from sokudan.train.stage1_distill import stage1_loss
 
 
@@ -62,6 +69,13 @@ class TrainConfig:
     log_every: int = 50
     amp_dtype: str = "bfloat16"
     device: str = "cuda"
+    encoding: str = "separate"
+    """`separate` (cross-attention head) or `joint` (one sequence, no head).
+
+    Set here rather than inferred from the model so that a checkpoint, its collator
+    and its diagnostics cannot disagree about which arm produced a number.
+    """
+    max_joint_tokens: int = 1024
 
 
 @dataclass
@@ -141,6 +155,42 @@ def _amp_dtype(name: str) -> torch.dtype:
             "float32": torch.float32}[name]
 
 
+def build_collator(
+    tokenizer: PreTrainedTokenizerBase, config: TrainConfig
+) -> Collator | JointCollator:
+    """The one place a `TrainConfig` becomes a collator.
+
+    `train`, `evaluate`, the gate and the diagnostics all call this, so an arm can
+    never be trained with one encoding and scored with the other.
+    """
+    if config.encoding == "joint":
+        return JointCollator(tokenizer, max_joint_tokens=config.max_joint_tokens)
+    if config.encoding != "separate":
+        raise ValueError(f"unknown encoding {config.encoding!r}")
+    return Collator(tokenizer, max_state_tokens=config.max_state_tokens)
+
+
+def run_model(model: nn.Module, batch: Batch | JointBatch) -> SokudanOutput:
+    """One call site for both encodings.
+
+    `train`, `evaluate` and the diagnostics all go through here, so the separate and
+    joint arms cannot drift into being scored by slightly different code -- which is
+    the §1-3 rule applied to the forward pass rather than to tokenisation. Dispatch
+    is on the batch, not on the model, because the collator is what decides which
+    arrangement the tensors are in.
+    """
+    if isinstance(batch, JointBatch):
+        return model(
+            batch.input_ids, batch.attention_mask,
+            batch.marker_positions, batch.marker_mask, batch.ordered,
+        )
+    return model(
+        batch.state_input_ids, batch.state_attention_mask,
+        batch.question_input_ids, batch.question_attention_mask,
+        batch.marker_positions, batch.marker_mask, batch.ordered,
+    )
+
+
 @torch.no_grad()
 def evaluate(
     model: SokudanModel,
@@ -173,11 +223,7 @@ def evaluate(
     for group in batches:
         batch = collator(group).to(device)
         with torch.autocast(device_type=device.type, dtype=amp, enabled=amp != torch.float32):
-            out = model(
-                batch.state_input_ids, batch.state_attention_mask,
-                batch.question_input_ids, batch.question_attention_mask,
-                batch.marker_positions, batch.marker_mask, batch.ordered,
-            )
+            out = run_model(model, batch)
         probs = out.probs.float().cpu().numpy()
         labels = batch.labels.cpu().numpy()
         for row, example in enumerate(group):
@@ -259,7 +305,7 @@ def train(
     model.to(device)
     model.train()
 
-    collator = Collator(tokenizer, max_state_tokens=config.max_state_tokens)
+    collator = build_collator(tokenizer, config)
     rng = _random.Random(config.seed)
 
     steps_per_epoch = math.ceil(len(train_examples) / config.batch_size)
@@ -288,11 +334,7 @@ def train(
 
             with torch.autocast(device_type=device.type, dtype=amp,
                                 enabled=amp != torch.float32):
-                out = model(
-                    batch.state_input_ids, batch.state_attention_mask,
-                    batch.question_input_ids, batch.question_attention_mask,
-                    batch.marker_positions, batch.marker_mask, batch.ordered,
-                )
+                out = run_model(model, batch)
             # The loss runs in fp32: RPS and the log both lose too much resolution in
             # bf16, which has about three decimal digits of mantissa.
             breakdown = stage1_loss(
@@ -333,7 +375,14 @@ def train(
         "before": before,
         "epochs": [asdict(log) for log in logs],
         "after": logs[-1].val if logs else before,
-        "question_cache": {"hits": collator.cache.hits, "misses": collator.cache.misses},
+        # The joint arm has no question cache by construction: its encoding depends
+        # on the state, so every pair is unique and there is nothing to memoise.
+        "question_cache": (
+            {"hits": collator.cache.hits, "misses": collator.cache.misses}
+            if isinstance(collator, Collator)
+            else {"hits": 0, "misses": 0, "not_applicable": "joint encoding"}
+        ),
+        "joint_truncated": getattr(collator, "truncated", 0),
     }
 
     if run_dir is not None:

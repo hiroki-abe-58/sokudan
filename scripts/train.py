@@ -127,6 +127,8 @@ def main() -> int:
     parser.add_argument("--max-state-tokens", type=int, default=1024)
     parser.add_argument("--ordinal-weight", type=float, default=1.0)
     parser.add_argument("--limit", type=int, default=None, help="truncate the train split")
+    parser.add_argument("--encoding", choices=("separate", "joint"),
+                        default="separate")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--save", action="store_true", help="write the checkpoint")
     args = parser.parse_args()
@@ -139,7 +141,12 @@ def main() -> int:
         train_examples = train_examples[: args.limit]
 
     tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID)
-    model = SokudanModel.from_pretrained_backbone(n_head_layers=args.head_layers)
+    if args.encoding == "joint":
+        from sokudan.model.joint import SokudanJointModel
+
+        model = SokudanJointModel.from_pretrained_backbone()
+    else:
+        model = SokudanModel.from_pretrained_backbone(n_head_layers=args.head_layers)
 
     config = TrainConfig(
         seed=args.seed,
@@ -150,6 +157,7 @@ def main() -> int:
         max_state_tokens=args.max_state_tokens,
         ordinal_weight=args.ordinal_weight,
         device=args.device,
+        encoding=args.encoding,
     )
 
     run_dir = Path(args.runs_dir) / args.run_id
@@ -163,7 +171,8 @@ def main() -> int:
         torch.save(
             {"state_dict": model.state_dict(),
              "config": {"n_head_layers": args.head_layers,
-                        "backbone": BACKBONE_MODEL_ID}},
+                        "backbone": BACKBONE_MODEL_ID,
+                        "encoding": args.encoding}},
             checkpoint,
         )
         print(f"checkpoint -> {checkpoint}")

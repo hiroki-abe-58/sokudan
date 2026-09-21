@@ -104,16 +104,17 @@ class OrdinalHead(nn.Module):
             nn.init.normal_(self.location.weight, std=init_scale)
         nn.init.zeros_(self.location.bias)
         # `cut_bias` trades exactness of the uniform start against trainability, and
-        # the trade is real rather than theoretical. -5.0 makes softplus(-5) = 0.0067
-        # and gives an *exactly* uniform start -- but softplus' at -5 is also 0.0067,
-        # so the gradient reaching this parameter is attenuated ~150x. An AdamW step
-        # moves a parameter by roughly the learning rate, so over a few hundred steps
-        # this one does not move at all.
+        # the trade is real rather than theoretical. The first version used -5.0,
+        # which makes softplus(-5) = 0.0067 and gives an *exactly* uniform start --
+        # but softplus' at -5 is also 0.0067, so the gradient reaching this parameter
+        # is attenuated ~150x. Measured over 930 steps it moved 0.001, from -5.000 to
+        # -4.999, while the cross-attention projection beside it went from 0 to 1.98.
         #
         # A frozen spacing is worse than slow learning. With every b_k ~ 0 the
         # thresholds collapse to `base_k + a`, a one-parameter family that slides mass
         # between the bottom and top levels but **cannot peak on a middle level** --
-        # for a 3-level scale it cannot say "confidently level 1".
+        # for a 3-level scale it cannot say "confidently level 1". Validation RPS
+        # accordingly sat at 0.2153 against 0.2169 before training.
         #
         # -1.0 gives softplus(-1) = 0.313 and a gradient scale of 0.269, roughly 40x
         # better, at the cost of a start that is near-uniform rather than exactly

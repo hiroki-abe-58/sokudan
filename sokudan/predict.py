@@ -21,7 +21,7 @@ from typing import Any
 
 import torch
 
-from sokudan.encoding.question import QuestionEncoderCache
+from sokudan.encoding.question import QuestionEncoderCache, encode_joint
 from sokudan.schema.question import Question, is_ordered, parse_questions
 
 
@@ -43,6 +43,7 @@ class Agent:
         device: str = "cuda",
         temperatures: dict[tuple[str, int], float] | None = None,
         max_state_tokens: int = 1024,
+        encoding: str = "separate",
     ) -> None:
         self.model = model
         self.tokenizer = tokenizer
@@ -50,6 +51,9 @@ class Agent:
         self.temperatures = temperatures or {}
         self.max_state_tokens = max_state_tokens
         self.cache = QuestionEncoderCache()
+        self.encoding = encoding
+        if encoding not in ("separate", "joint"):
+            raise ValueError(f"unknown encoding {encoding!r}")
 
     @staticmethod
     def _state_text(state: str | dict[str, Any] | list[Any]) -> str:
@@ -90,45 +94,67 @@ class Agent:
         }
 
         text = self._state_text(state)
-        encoded_state = encode_state(text, self.tokenizer, max_tokens=self.max_state_tokens)
-        encoded_questions = {
-            qid: self.cache.get(item.question, self.tokenizer)
-            for qid, item in prepared.items()
-        }
-
         order = list(prepared)
         n = len(order)
-        question_len = max(len(encoded_questions[q].input_ids) for q in order)
-        n_markers = max(encoded_questions[q].n_markers for q in order)
         pad_id = self.tokenizer.pad_token_id
+        device = torch.device(self.device)
 
-        question_ids = torch.full((n, question_len), pad_id, dtype=torch.long)
-        question_mask = torch.zeros((n, question_len), dtype=torch.long)
+        if self.encoding == "joint":
+            # v0.1. The state is re-encoded per question, so there is nothing to
+            # cache and latency grows with the number of questions
+            # (`docs/architecture.md` §1.2).
+            encoded = [
+                encode_joint(prepared[qid].question, text, self.tokenizer,
+                             max_tokens=self.max_state_tokens)
+                for qid in order
+            ]
+            state_tokens = max((e.n_state_tokens for e in encoded), default=0)
+            truncated = any(e.truncated for e in encoded)
+        else:
+            encoded_state = encode_state(
+                text, self.tokenizer, max_tokens=self.max_state_tokens
+            )
+            encoded = [self.cache.get(prepared[qid].question, self.tokenizer)
+                       for qid in order]
+            state_tokens = encoded_state.n_tokens
+            truncated = encoded_state.truncated
+
+        sequence_len = max(len(e.input_ids) for e in encoded)
+        n_markers = max(e.n_markers for e in encoded)
+
+        input_ids = torch.full((n, sequence_len), pad_id, dtype=torch.long)
+        attention_mask = torch.zeros((n, sequence_len), dtype=torch.long)
         marker_positions = torch.zeros((n, n_markers), dtype=torch.long)
         marker_mask = torch.zeros((n, n_markers), dtype=torch.long)
         ordered = torch.zeros(n, dtype=torch.bool)
 
         for row, qid in enumerate(order):
-            encoded = encoded_questions[qid]
-            question_ids[row, : len(encoded.input_ids)] = torch.tensor(encoded.input_ids)
-            question_mask[row, : len(encoded.input_ids)] = 1
-            positions = encoded.marker_positions
+            item = encoded[row]
+            input_ids[row, : len(item.input_ids)] = torch.tensor(item.input_ids)
+            attention_mask[row, : len(item.input_ids)] = 1
+            positions = item.marker_positions
             marker_positions[row, : len(positions)] = torch.tensor(positions)
             marker_positions[row, len(positions):] = positions[0]
             marker_mask[row, : len(positions)] = 1
             ordered[row] = is_ordered(prepared[qid].question)
 
-        device = torch.device(self.device)
-        # The state is encoded once and broadcast across every question -- the
-        # structural point of §6.2. Not a speed claim until §9 measures both sides.
-        state_ids = torch.tensor([encoded_state.input_ids], dtype=torch.long).to(device)
-        state_mask = torch.tensor([encoded_state.attention_mask], dtype=torch.long).to(device)
-
-        out = self.model(
-            state_ids, state_mask,
-            question_ids.to(device), question_mask.to(device),
-            marker_positions.to(device), marker_mask.to(device), ordered.to(device),
-        )
+        if self.encoding == "joint":
+            out = self.model(
+                input_ids.to(device), attention_mask.to(device),
+                marker_positions.to(device), marker_mask.to(device), ordered.to(device),
+            )
+            question_tokens = int(attention_mask.sum()) - state_tokens * n
+        else:
+            state_ids = torch.tensor(
+                [encoded_state.input_ids], dtype=torch.long).to(device)
+            state_mask = torch.tensor(
+                [encoded_state.attention_mask], dtype=torch.long).to(device)
+            out = self.model(
+                state_ids, state_mask,
+                input_ids.to(device), attention_mask.to(device),
+                marker_positions.to(device), marker_mask.to(device), ordered.to(device),
+            )
+            question_tokens = int(attention_mask.sum())
         probs = out.probs.float().cpu().numpy()
 
         answers: dict[str, Any] = {}
@@ -161,10 +187,12 @@ class Agent:
         return {
             "model": "sokudan-ja-310m",
             "answers": answers,
+            "encoding": self.encoding,
             "usage": {
-                "state_tokens": encoded_state.n_tokens,
-                "state_truncated": encoded_state.truncated,
-                "question_tokens": int(question_mask.sum()),
+                "state_tokens": state_tokens,
+                "state_truncated": truncated,
+                "question_tokens": max(question_tokens, 0),
+                "backbone_passes": n if self.encoding == "joint" else 2,
                 "output_tokens": 0,
             },
         }
@@ -196,10 +224,16 @@ def load(
     blob = torch.load(str(checkpoint), map_location="cpu", weights_only=False)
     config = blob.get("config", {})
     backbone_id = config.get("backbone", BACKBONE_MODEL_ID)
+    encoding = config.get("encoding", "separate")
 
-    model = SokudanModel.from_pretrained_backbone(
-        backbone_id, n_head_layers=config.get("n_head_layers", 2)
-    )
+    if encoding == "joint":
+        from sokudan.model.joint import SokudanJointModel
+
+        model = SokudanJointModel.from_pretrained_backbone(backbone_id)
+    else:
+        model = SokudanModel.from_pretrained_backbone(
+            backbone_id, n_head_layers=config.get("n_head_layers", 2)
+        )
     model.load_state_dict(blob["state_dict"])
     model.to(device).eval()
 
@@ -213,4 +247,4 @@ def load(
         parsed = temperatures
 
     return Agent(model, AutoTokenizer.from_pretrained(backbone_id),
-                 device=device, temperatures=parsed)
+                 device=device, temperatures=parsed, encoding=encoding)

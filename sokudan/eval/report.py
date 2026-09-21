@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 
 from sokudan.calibration.metrics import (
+    auroc,
     binary_to_probs,
     reliability_bins,
     summarize_choice,
@@ -42,11 +43,23 @@ def score_baseline(output: BaselineOutput, gold: dict[str, np.ndarray]) -> dict[
             "questions_per_sec": float(3 * len(latencies) / latencies.sum()),
         }
 
+    # AUROC only makes sense for the boolean, and only it is reported without one
+    # elsewhere: `docs/benchmarks.md` §8 records that `bool` accuracy and AUROC
+    # pointed in opposite directions on s0 (0.683 beat laya on accuracy while 0.405
+    # lost badly on ranking, because the accuracy came from answering "false" every
+    # time). Scoring the boolean without it is how that stays invisible.
+    bool_metrics = summarize_choice(boolean, gold["bool"])
+    p_true = np.asarray(output.bool_p_true, dtype=np.float64)
+    if 0 < gold["bool"].sum() < len(gold["bool"]):
+        bool_metrics["auroc"] = auroc(p_true, gold["bool"])
+    bool_metrics["mean_p_true"] = float(p_true.mean())
+    bool_metrics["gold_true_rate"] = float(gold["bool"].mean())
+
     return {
         "name": output.name,
         "choice": summarize_choice(choice, gold["choice"]),
         "score": summarize_ordinal(score, gold["score"]),
-        "bool": summarize_choice(boolean, gold["bool"]),
+        "bool": bool_metrics,
         "latency": latency,
         "parse_failures": output.parse_failures,
         "parse_attempts": output.parse_attempts,

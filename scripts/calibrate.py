@@ -28,7 +28,7 @@ from sokudan.calibration.metrics import brier, ece, nll
 from sokudan.calibration.temperature import apply_temperature, fit_temperature
 from sokudan.model.sokudan import SokudanModel
 from sokudan.train.dataset import Collator, load_examples
-from sokudan.train.loop import length_bucketed_batches
+from sokudan.train.loop import TrainConfig, build_collator, length_bucketed_batches, run_model
 
 
 @torch.no_grad()
@@ -47,11 +47,7 @@ def collect_probabilities(
     for group in batches:
         batch = collator(group).to(device)
         with torch.autocast(device_type=torch.device(device).type, dtype=torch.bfloat16):
-            out = model(
-                batch.state_input_ids, batch.state_attention_mask,
-                batch.question_input_ids, batch.question_attention_mask,
-                batch.marker_positions, batch.marker_mask, batch.ordered,
-            )
+            out = run_model(model, batch)
         probs = out.probs.float().cpu().numpy()
         labels = batch.labels.cpu().numpy()
         for row, example in enumerate(group):
@@ -80,15 +76,26 @@ def main() -> int:
 
     blob = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
     config = blob.get("config", {})
-    model = SokudanModel.from_pretrained_backbone(
-        config.get("backbone", BACKBONE_MODEL_ID),
-        n_head_layers=config.get("n_head_layers", 2),
-    )
+    encoding = config.get("encoding", "separate")
+    if encoding == "joint":
+        from sokudan.model.joint import SokudanJointModel
+
+        model = SokudanJointModel.from_pretrained_backbone(
+            config.get("backbone", BACKBONE_MODEL_ID)
+        )
+    else:
+        model = SokudanModel.from_pretrained_backbone(
+            config.get("backbone", BACKBONE_MODEL_ID),
+            n_head_layers=config.get("n_head_layers", 2),
+        )
     model.load_state_dict(blob["state_dict"])
     model.to(args.device).eval()
 
     tokenizer = AutoTokenizer.from_pretrained(config.get("backbone", BACKBONE_MODEL_ID))
-    collator = Collator(tokenizer, max_state_tokens=1024)
+    collator = build_collator(
+        tokenizer,
+        TrainConfig(device=args.device, encoding=encoding, max_state_tokens=1024),
+    )
     examples = load_examples(args.val)
 
     buckets = collect_probabilities(model, examples, collator, args.device, args.batch_size)

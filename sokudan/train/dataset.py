@@ -24,7 +24,7 @@ import torch
 from torch import Tensor
 from transformers import PreTrainedTokenizerBase
 
-from sokudan.encoding.question import QuestionEncoderCache
+from sokudan.encoding.question import MAX_JOINT_TOKENS, QuestionEncoderCache, encode_joint
 from sokudan.encoding.state import encode_state
 from sokudan.schema.question import is_ordered, parse_question
 
@@ -194,3 +194,96 @@ def length_bucketed_batches(
     if shuffle:
         rng.shuffle(batches)
     return batches
+
+
+# ---------------------------------------------------------------------------
+# Joint mode (s2c). Same `Example`, same batching, a different encoding.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class JointBatch:
+    """One sequence per (question, state) pair, so no separate state tensors."""
+
+    input_ids: Tensor
+    attention_mask: Tensor
+    marker_positions: Tensor
+    marker_mask: Tensor
+    labels: Tensor
+    ordered: Tensor
+
+    def to(self, device: torch.device | str) -> JointBatch:
+        return JointBatch(**{
+            name: value.to(device) for name, value in self.__dict__.items()
+        })
+
+    def __len__(self) -> int:
+        return self.labels.shape[0]
+
+
+class JointCollator:
+    """Encodes examples with `encode_joint` (§6.1 measurement, s2c).
+
+    **No question cache.** The separate arm can memoise `H_q` because the question
+    encoding does not depend on the state; here it does, so every pair is unique and
+    a cache would only waste memory. That difference is the point of the comparison
+    and not an oversight.
+    """
+
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        *,
+        max_joint_tokens: int = MAX_JOINT_TOKENS,
+    ) -> None:
+        self.tokenizer = tokenizer
+        self.max_joint_tokens = max_joint_tokens
+        self.pad_id = tokenizer.pad_token_id
+        if self.pad_id is None:
+            raise ValueError("tokenizer has no pad token; padding would be ambiguous")
+        self.truncated = 0
+
+    def __call__(self, examples: list[Example]) -> JointBatch:
+        encoded = [
+            encode_joint(e.question, e.state, self.tokenizer,
+                         max_tokens=self.max_joint_tokens)
+            for e in examples
+        ]
+        self.truncated += sum(1 for e in encoded if e.truncated)
+
+        length = max(len(e.input_ids) for e in encoded)
+        n_markers = max(e.n_markers for e in encoded)
+        batch_size = len(examples)
+
+        input_ids = torch.full((batch_size, length), self.pad_id, dtype=torch.long)
+        attention_mask = torch.zeros((batch_size, length), dtype=torch.long)
+        marker_positions = torch.zeros((batch_size, n_markers), dtype=torch.long)
+        marker_mask = torch.zeros((batch_size, n_markers), dtype=torch.long)
+        labels = torch.zeros(batch_size, dtype=torch.long)
+        ordered = torch.zeros(batch_size, dtype=torch.bool)
+
+        for row, (example, item) in enumerate(zip(examples, encoded, strict=True)):
+            input_ids[row, : len(item.input_ids)] = torch.tensor(item.input_ids)
+            attention_mask[row, : len(item.input_ids)] = 1
+
+            positions = item.marker_positions
+            marker_positions[row, : len(positions)] = torch.tensor(positions)
+            marker_mask[row, : len(positions)] = 1
+            marker_positions[row, len(positions):] = positions[0]
+
+            if not 0 <= example.label < len(positions):
+                raise ValueError(
+                    f"label {example.label} is outside the {len(positions)} options of "
+                    f"{example.domain}/{example.attribute}"
+                )
+            labels[row] = example.label
+            ordered[row] = example.ordered
+
+        return JointBatch(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            marker_positions=marker_positions,
+            marker_mask=marker_mask,
+            labels=labels,
+            ordered=ordered,
+        )

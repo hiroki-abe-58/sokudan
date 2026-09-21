@@ -80,6 +80,10 @@ def main() -> int:
     parser.add_argument("--out", type=str, default="runs/baseline_ja")
     parser.add_argument("--limit", type=int, default=None, help="use only the first N items")
     parser.add_argument("--skip-llm", action="store_true", help="skip the slow LLM baseline")
+    parser.add_argument("--skip-laya", action="store_true",
+                        help="skip the laya and local-LLM baselines; they are already "
+                             "measured in docs/baseline_ja.md and re-running them "
+                             "competes for the same GPU")
     parser.add_argument("--sokudan-checkpoint", default=None,
                         help="evaluate a trained sokudan checkpoint alongside the baselines")
     parser.add_argument("--sokudan-temperatures", default=None,
@@ -95,13 +99,16 @@ def main() -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    baselines: list[Any] = [
-        LayaBaseline("convaiinnovations/laya-multilingual", "laya-multilingual (ja)"),
-        LayaBaseline("convaiinnovations/laya", "laya (英語版モデルに日本語入力)"),
-        MajorityClassBaseline(),
-        RandomBaseline(),
-    ]
-    if not args.skip_llm:
+    baselines: list[Any] = []
+    if not args.skip_laya:
+        baselines += [
+            LayaBaseline("convaiinnovations/laya-multilingual", "laya-multilingual (ja)"),
+            LayaBaseline("convaiinnovations/laya", "laya (英語版モデルに日本語入力)"),
+        ]
+    # Majority and random cost nothing and are the two references every number in
+    # `docs/benchmarks.md` is read against, so they always run.
+    baselines += [MajorityClassBaseline(), RandomBaseline()]
+    if not args.skip_llm and not args.skip_laya:
         baselines.append(LocalLLMClassifierBaseline())
 
     if args.sokudan_checkpoint:

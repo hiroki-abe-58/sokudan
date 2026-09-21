@@ -27,7 +27,8 @@ from sokudan.calibration.temperature import apply_temperature
 from sokudan.eval.baselines import BaselineOutput
 from sokudan.eval.bench_ja import DEPARTMENTS, URGENCY_LEVELS, BenchItem, bench_questions
 from sokudan.schema.question import parse_question
-from sokudan.train.dataset import Collator, Example
+from sokudan.train.dataset import Example
+from sokudan.train.loop import TrainConfig, build_collator, run_model
 
 
 class SokudanBaseline:
@@ -56,6 +57,7 @@ class SokudanBaseline:
         self.batch_size = batch_size
         self.temperatures = temperatures or {}
         self._model: Any | None = None
+        self._encoding = "separate"
         self._tokenizer: Any | None = None
 
     def _load(self) -> tuple[Any, Any]:
@@ -63,14 +65,27 @@ class SokudanBaseline:
             from transformers import AutoTokenizer
 
             from sokudan.config import BACKBONE_MODEL_ID
-            from sokudan.model.sokudan import SokudanModel
 
             blob = torch.load(self.checkpoint, map_location="cpu", weights_only=False)
             config = blob.get("config", {})
-            model = SokudanModel.from_pretrained_backbone(
-                config.get("backbone", BACKBONE_MODEL_ID),
-                n_head_layers=config.get("n_head_layers", 2),
-            )
+            # The checkpoint records which arm trained it (`scripts/train.py`), so a
+            # joint checkpoint cannot be scored through the separate path by
+            # forgetting a flag -- that would report a number for an architecture
+            # that was never trained.
+            self._encoding = config.get("encoding", "separate")
+            if self._encoding == "joint":
+                from sokudan.model.joint import SokudanJointModel
+
+                model = SokudanJointModel.from_pretrained_backbone(
+                    config.get("backbone", BACKBONE_MODEL_ID)
+                )
+            else:
+                from sokudan.model.sokudan import SokudanModel
+
+                model = SokudanModel.from_pretrained_backbone(
+                    config.get("backbone", BACKBONE_MODEL_ID),
+                    n_head_layers=config.get("n_head_layers", 2),
+                )
             model.load_state_dict(blob["state_dict"])
             model.to(self.device).eval()
             self._model = model
@@ -85,7 +100,11 @@ class SokudanBaseline:
     @torch.no_grad()
     def run(self, items: list[BenchItem]) -> BaselineOutput:
         model, tokenizer = self._load()
-        collator = Collator(tokenizer, max_state_tokens=1024)
+        collator = build_collator(
+            tokenizer,
+            TrainConfig(device=self.device, encoding=self._encoding,
+                        max_state_tokens=1024),
+        )
         questions = bench_questions()
 
         # Three questions per item, each a separate row. The state is encoded once
@@ -111,11 +130,7 @@ class SokudanBaseline:
                     for item in chunk
                 ]
                 batch = collator(examples).to(self.device)
-                out = model(
-                    batch.state_input_ids, batch.state_attention_mask,
-                    batch.question_input_ids, batch.question_attention_mask,
-                    batch.marker_positions, batch.marker_mask, batch.ordered,
-                )
+                out = run_model(model, batch)
                 probs = out.probs.float().cpu().numpy()
                 n_options = int(batch.marker_mask[0].sum())
                 temperature = self._temperature_for(kind, n_options)

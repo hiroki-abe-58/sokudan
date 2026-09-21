@@ -1,0 +1,585 @@
+{
+  "generated_at": "2026-09-21T17:32:33+0900",
+  "generator_model": "qwen3:30b-a3b-instruct-2507-q4_K_M",
+  "temperature": 0.9,
+  "seed": 20260921,
+  "documents_requested": 5000,
+  "documents_kept": 4833,
+  "documents_by_split": {
+    "val": 717,
+    "train": 4116
+  },
+  "documents_by_domain": {
+    "apology_reply": 238,
+    "contract_clause": 205,
+    "customer_inquiry": 238,
+    "expense_claim": 238,
+    "freelance_client": 238,
+    "incident_report": 238,
+    "internal_request": 238,
+    "job_application": 239,
+    "landlord_tenant": 236,
+    "medical_reception": 238,
+    "meeting_minutes": 238,
+    "moderation": 238,
+    "phishing": 238,
+    "product_review": 238,
+    "public_office": 238,
+    "review_request": 218,
+    "school_notice": 238,
+    "social_post": 238,
+    "supplier_message": 236,
+    "survey_freetext": 129,
+    "training_feedback": 238
+  },
+  "generation_elapsed_s": 10215.2,
+  "verification_elapsed_s": 2798.9,
+  "rejections": {
+    "leaked:対応": 508,
+    "leaked:期間": 173,
+    "leaked:設計": 97,
+    "leaked:必要": 92,
+    "meta:以下": 56,
+    "leaked:仕様": 55,
+    "leaked:完成": 40,
+    "leaked:手続き": 35,
+    "leaked:わずか": 21,
+    "leaked:期待外れ": 20,
+    "leaked:書類の発行": 18,
+    "leaked:実装": 17,
+    "leaked:中身": 16,
+    "leaked:放置": 16,
+    "leaked:品質": 16,
+    "leaked:他院への紹介": 15,
+    "leaked:権利関係": 15,
+    "leaked:落胆": 15,
+    "leaked:表記": 13,
+    "leaked:共用部": 13,
+    "leaked:知的財産": 12,
+    "leaked:交通費": 11,
+    "leaked:一部の利用者": 11,
+    "leaked:法務": 8,
+    "leaked:手直し": 8,
+    "leaked:考えている": 8,
+    "leaked:重大": 8,
+    "leaked:再委託": 7,
+    "leaked:価格": 7,
+    "leaked:文言": 6,
+    "leaked:未特定": 6,
+    "leaked:予約の変更": 5,
+    "leaked:我慢できる": 5,
+    "meta:承知": 5,
+    "leaked:正常": 5,
+    "leaked:文面": 4,
+    "leaked:設備": 4,
+    "leaked:宿泊費": 4,
+    "leaked:要件": 4,
+    "leaked:気になる程度": 3,
+    "leaked:日常生活に支障": 3,
+    "leaked:仕様確認": 3,
+    "leaked:成果物": 3,
+    "leaked:遅い": 3,
+    "leaked:報酬": 3,
+    "leaked:支払いの手続き": 3,
+    "leaked:コピー": 3,
+    "leaked:特定済み": 2,
+    "leaked:複数回の来庁が必要": 2,
+    "leaked:明示されていない": 2,
+    "leaked:がっかり": 2,
+    "leaked:注意": 2,
+    "leaked:納得できません": 2,
+    "leaked:耐えがたい": 1,
+    "leaked:見送らせて": 1,
+    "leaked:お断り": 1,
+    "leaked:書類の書き方": 1,
+    "leaked:軽微": 1,
+    "leaked:秘密保持": 1,
+    "leaked:進捗の共有": 1,
+    "too_short": 1,
+    "leaked:大きい": 1,
+    "leaked:急かされて": 1,
+    "leaked:人事": 1,
+    "leaked:未経験": 1,
+    "leaked:残念です": 1,
+    "leaked:着手前": 1,
+    "leaked:行事の案内": 1,
+    "leaked:修正の依頼": 1,
+    "leaked:対応が遅れて": 1,
+    "leaked:管理部門": 1,
+    "leaked:研修費": 1,
+    "leaked:様子見": 1,
+    "leaked:契約の手続き": 1,
+    "leaked:書類が1点": 1,
+    "leaked:費用の精算": 1,
+    "leaked:エンジニア": 1,
+    "leaked:これから": 1,
+    "leaked:落ち着いている": 1,
+    "leaked:含まれている": 1,
+    "leaked:会計の確認": 1,
+    "leaked:進路の相談": 1,
+    "leaked:経理": 1,
+    "leaked:不要": 1,
+    "leaked:責任範囲": 1,
+    "leaked:進み具合": 1,
+    "leaked:差し戻し": 1
+  },
+  "verification_failures": {},
+  "domain_catalog": {
+    "n_domains": 21,
+    "n_attributes": 42,
+    "attributes_by_kind": {
+      "choice": 15,
+      "bool": 10,
+      "score": 17
+    },
+    "score_level_counts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "choice_option_counts": [
+      4,
+      5,
+      6
+    ]
+  },
+  "intent_catalog": {
+    "n_attributes": 24,
+    "by_tier": {
+      "S": 6,
+      "E": 10,
+      "I": 8
+    },
+    "held_out": [
+      "ends_with_question",
+      "implies_declining",
+      "implies_escalation",
+      "implies_running_out_of_patience",
+      "requests_owner_change"
+    ],
+    "held_out_by_tier": {
+      "S": 1,
+      "E": 1,
+      "I": 3
+    },
+    "n_trainable": 19,
+    "trainable_by_tier": {
+      "S": 5,
+      "E": 9,
+      "I": 5
+    },
+    "exclusive_pairs": [
+      [
+        "states_dissatisfaction",
+        "implies_disappointment"
+      ],
+      [
+        "demands_urgent_action",
+        "implies_running_out_of_patience"
+      ],
+      [
+        "blames_recipient",
+        "implies_reproach_for_delay"
+      ],
+      [
+        "implies_declining",
+        "implies_reluctant_compliance"
+      ],
+      [
+        "blames_recipient",
+        "implies_disappointment"
+      ],
+      [
+        "lists_multiple_issues",
+        "implies_out_of_depth"
+      ]
+    ],
+    "question_forms_per_attribute": [
+      4
+    ]
+  },
+  "verification": {
+    "per_attribute": [
+      {
+        "attribute": "admits_own_fault",
+        "tier": "E",
+        "held_out": false,
+        "total": 2192,
+        "positive_rate": 0.5032,
+        "agree": 2073,
+        "mismatch": 119,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0543,
+        "discard_rate": 0.0543
+      },
+      {
+        "attribute": "blames_recipient",
+        "tier": "E",
+        "held_out": false,
+        "total": 1321,
+        "positive_rate": 0.4693,
+        "agree": 983,
+        "mismatch": 338,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.2559,
+        "discard_rate": 0.2559
+      },
+      {
+        "attribute": "demands_urgent_action",
+        "tier": "E",
+        "held_out": false,
+        "total": 2036,
+        "positive_rate": 0.4769,
+        "agree": 1915,
+        "mismatch": 121,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0594,
+        "discard_rate": 0.0594
+      },
+      {
+        "attribute": "offers_alternative",
+        "tier": "E",
+        "held_out": false,
+        "total": 2173,
+        "positive_rate": 0.4988,
+        "agree": 2006,
+        "mismatch": 167,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0769,
+        "discard_rate": 0.0769
+      },
+      {
+        "attribute": "refers_to_past_exchange",
+        "tier": "E",
+        "held_out": false,
+        "total": 2194,
+        "positive_rate": 0.4945,
+        "agree": 1832,
+        "mismatch": 362,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.165,
+        "discard_rate": 0.165
+      },
+      {
+        "attribute": "requests_compensation",
+        "tier": "E",
+        "held_out": false,
+        "total": 2111,
+        "positive_rate": 0.4974,
+        "agree": 1913,
+        "mismatch": 198,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0938,
+        "discard_rate": 0.0938
+      },
+      {
+        "attribute": "requests_owner_change",
+        "tier": "E",
+        "held_out": true,
+        "total": 717,
+        "positive_rate": 0.523,
+        "agree": 696,
+        "mismatch": 21,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0293,
+        "discard_rate": 0.0293
+      },
+      {
+        "attribute": "requests_phone_callback",
+        "tier": "E",
+        "held_out": false,
+        "total": 2178,
+        "positive_rate": 0.4927,
+        "agree": 2141,
+        "mismatch": 37,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.017,
+        "discard_rate": 0.017
+      },
+      {
+        "attribute": "states_dissatisfaction",
+        "tier": "E",
+        "held_out": false,
+        "total": 1716,
+        "positive_rate": 0.5006,
+        "agree": 1397,
+        "mismatch": 319,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.1859,
+        "discard_rate": 0.1859
+      },
+      {
+        "attribute": "states_gratitude",
+        "tier": "E",
+        "held_out": false,
+        "total": 2108,
+        "positive_rate": 0.4953,
+        "agree": 2037,
+        "mismatch": 71,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0337,
+        "discard_rate": 0.0337
+      },
+      {
+        "attribute": "implies_declining",
+        "tier": "I",
+        "held_out": true,
+        "total": 239,
+        "positive_rate": 0.5021,
+        "agree": 177,
+        "mismatch": 62,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.2594,
+        "discard_rate": 0.2594
+      },
+      {
+        "attribute": "implies_disappointment",
+        "tier": "I",
+        "held_out": false,
+        "total": 850,
+        "positive_rate": 0.5012,
+        "agree": 707,
+        "mismatch": 143,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.1682,
+        "discard_rate": 0.1682
+      },
+      {
+        "attribute": "implies_escalation",
+        "tier": "I",
+        "held_out": true,
+        "total": 238,
+        "positive_rate": 0.5588,
+        "agree": 180,
+        "mismatch": 57,
+        "unknown": 1,
+        "missing": 0,
+        "mismatch_rate": 0.2395,
+        "discard_rate": 0.2437
+      },
+      {
+        "attribute": "implies_out_of_depth",
+        "tier": "I",
+        "held_out": false,
+        "total": 852,
+        "positive_rate": 0.5082,
+        "agree": 727,
+        "mismatch": 125,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.1467,
+        "discard_rate": 0.1467
+      },
+      {
+        "attribute": "implies_pressure_from_others",
+        "tier": "I",
+        "held_out": false,
+        "total": 790,
+        "positive_rate": 0.5038,
+        "agree": 640,
+        "mismatch": 150,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.1899,
+        "discard_rate": 0.1899
+      },
+      {
+        "attribute": "implies_reluctant_compliance",
+        "tier": "I",
+        "held_out": false,
+        "total": 822,
+        "positive_rate": 0.5109,
+        "agree": 716,
+        "mismatch": 105,
+        "unknown": 1,
+        "missing": 0,
+        "mismatch_rate": 0.1277,
+        "discard_rate": 0.129
+      },
+      {
+        "attribute": "implies_reproach_for_delay",
+        "tier": "I",
+        "held_out": false,
+        "total": 802,
+        "positive_rate": 0.515,
+        "agree": 632,
+        "mismatch": 169,
+        "unknown": 1,
+        "missing": 0,
+        "mismatch_rate": 0.2107,
+        "discard_rate": 0.212
+      },
+      {
+        "attribute": "implies_running_out_of_patience",
+        "tier": "I",
+        "held_out": true,
+        "total": 240,
+        "positive_rate": 0.5458,
+        "agree": 206,
+        "mismatch": 34,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.1417,
+        "discard_rate": 0.1417
+      },
+      {
+        "attribute": "cites_numbers",
+        "tier": "S",
+        "held_out": false,
+        "total": 2125,
+        "positive_rate": 0.512,
+        "agree": 2065,
+        "mismatch": 60,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0282,
+        "discard_rate": 0.0282
+      },
+      {
+        "attribute": "ends_with_question",
+        "tier": "S",
+        "held_out": true,
+        "total": 717,
+        "positive_rate": 0.5021,
+        "agree": 648,
+        "mismatch": 69,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0962,
+        "discard_rate": 0.0962
+      },
+      {
+        "attribute": "lists_multiple_issues",
+        "tier": "S",
+        "held_out": false,
+        "total": 1748,
+        "positive_rate": 0.4868,
+        "agree": 1537,
+        "mismatch": 211,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.1207,
+        "discard_rate": 0.1207
+      },
+      {
+        "attribute": "mentions_attachment",
+        "tier": "S",
+        "held_out": false,
+        "total": 2097,
+        "positive_rate": 0.5289,
+        "agree": 2085,
+        "mismatch": 12,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0057,
+        "discard_rate": 0.0057
+      },
+      {
+        "attribute": "mentions_deadline",
+        "tier": "S",
+        "held_out": false,
+        "total": 2158,
+        "positive_rate": 0.5,
+        "agree": 2027,
+        "mismatch": 131,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0607,
+        "discard_rate": 0.0607
+      },
+      {
+        "attribute": "names_third_party",
+        "tier": "S",
+        "held_out": false,
+        "total": 2144,
+        "positive_rate": 0.5163,
+        "agree": 1957,
+        "mismatch": 187,
+        "unknown": 0,
+        "missing": 0,
+        "mismatch_rate": 0.0872,
+        "discard_rate": 0.0872
+      }
+    ],
+    "by_tier": {
+      "E": {
+        "total": 18746,
+        "mismatch_rate": 0.0935,
+        "unknown_rate": 0.0,
+        "discard_rate": 0.0935
+      },
+      "I": {
+        "total": 4833,
+        "mismatch_rate": 0.1748,
+        "unknown_rate": 0.0006,
+        "discard_rate": 0.1755
+      },
+      "S": {
+        "total": 10989,
+        "mismatch_rate": 0.061,
+        "unknown_rate": 0.0,
+        "discard_rate": 0.061
+      }
+    },
+    "length_vs_true_count": {
+      "train": {
+        "n": 4116,
+        "r": 0.2346,
+        "mean_chars": 316.5,
+        "mean_true": 3.5
+      },
+      "val": {
+        "n": 717,
+        "r": 0.2043,
+        "mean_chars": 311.6,
+        "mean_true": 4.09
+      }
+    }
+  },
+  "paraphrase_stability": {
+    "n_documents": 300,
+    "failures": {},
+    "by_tier": {
+      "E": {
+        "total": 1247,
+        "mismatch_rate": 0.1131,
+        "unknown_rate": 0.0,
+        "discard_rate": 0.1131
+      },
+      "I": {
+        "total": 300,
+        "mismatch_rate": 0.1933,
+        "unknown_rate": 0.0067,
+        "discard_rate": 0.2
+      },
+      "S": {
+        "total": 853,
+        "mismatch_rate": 0.1231,
+        "unknown_rate": 0.0,
+        "discard_rate": 0.1231
+      }
+    }
+  },
+  "catalog_leak": {
+    "strings_scanned": 874,
+    "bench_term_hits": [],
+    "bench_instruction_collisions": [],
+    "bench_label_collisions": [],
+    "clean": true
+  }
+}
