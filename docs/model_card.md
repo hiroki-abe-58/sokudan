@@ -39,10 +39,18 @@ base_model: sbintuitions/modernbert-ja-310m
 
 ## 使い方
 
+PyPI には上げていないので、リポジトリから入れてください:
+
+```bash
+pip install git+https://github.com/hiroki-abe-58/sokudan.git
+```
+
 ```python
 import sokudan
 
-agent = sokudan.load("model.pt", temperatures="temperatures.json")
+# リポジトリ ID を渡せば重みと temperatures.json を取得します。
+# 未較正で使う場合は temperatures を渡さないでください（下の Limits）。
+agent = sokudan.load("GeneLab/sokudan-ja-310m", temperatures="temperatures.json")
 result = agent.predict(
     {"body": "先月の請求で同じ金額が二回引き落とされています。至急ご確認ください。"},
     {

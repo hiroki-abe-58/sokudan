@@ -14,7 +14,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.optimize import minimize_scalar
 
 from sokudan.calibration.metrics import EPS, nll
 
@@ -33,6 +32,20 @@ def apply_temperature(probs: np.ndarray, temperature: float) -> np.ndarray:
     return scaled / scaled.sum(axis=1, keepdims=True)
 
 
+def _minimize_scalar():
+    """Imported at call time so that installing the package does not require scipy.
+
+    `apply_temperature` is a division in log space and is what `sokudan.predict`
+    calls on every request. Fitting is a separate, offline job. A module-level
+    `from scipy.optimize import minimize_scalar` made `pip install sokudan` followed
+    by `agent.predict(...)` fail with ModuleNotFoundError, which a clean-venv install
+    check caught.
+    """
+    from scipy.optimize import minimize_scalar
+
+    return minimize_scalar
+
+
 def fit_temperature(probs: np.ndarray, labels: np.ndarray) -> float:
     """Find the temperature minimising NLL on this data."""
     probs = np.asarray(probs, dtype=np.float64)
@@ -40,7 +53,7 @@ def fit_temperature(probs: np.ndarray, labels: np.ndarray) -> float:
     if len(labels) == 0:
         raise ValueError("cannot fit a temperature on an empty set")
 
-    result = minimize_scalar(
+    result = _minimize_scalar()(
         lambda t: nll(apply_temperature(probs, t), labels),
         bounds=T_BOUNDS,
         method="bounded",

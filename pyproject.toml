@@ -1,6 +1,6 @@
 [project]
 name = "sokudan"
-version = "0.1.0.dev0"
+version = "0.1.1"
 description = "Japanese System One decision model: typed answers + calibrated probabilities in a single forward pass, no text generation."
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
