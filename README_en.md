@@ -39,12 +39,13 @@ Before building anything, we measured how existing System One models behave **in
 Japanese** (300 Japanese business messages, `bench_ja`, shipped in full, see
 [`docs/baseline_ja.md`](docs/baseline_ja.md)).
 
-### `bench_ja` licence and intended use
+### `bench_ja` / `bench_en` licence and intended use
 
-`data/bench_ja.jsonl` is distributed under **CC BY 4.0** (separate from the code's
-Apache-2.0).
+`data/bench_ja.jsonl` and `data/bench_en.jsonl` are distributed under **CC BY 4.0**
+(separate from the code's Apache-2.0).
 
-> **Evaluation only. Do not mix it into training data.**
+> **Intended for evaluation; please refrain from using it as training data.**
+> This is a request, not a licence restriction.
 > It is a held-out test set for measuring generalisation to unseen schemas, and it
 > stops serving that purpose the moment it is trained on.
 

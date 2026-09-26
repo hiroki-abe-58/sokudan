@@ -48,5 +48,9 @@
     "Not urgent",
     "Soon",
     "Work is blocked"
-  ]
+  ],
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "usage": "CC BY 4.0。評価用途を想定しており、学習データとしての利用は控えてください（お願いであり、ライセンス上の制限ではありません）。このセットは言語だけを変えた bench_ja の対照となる held-out テストセットです。",
+  "usage_en": "CC BY 4.0. Intended for evaluation; please refrain from using it as training data (a request, not a licence restriction). This set is a held-out control for bench_ja that changes only the language."
 }
