@@ -1,6 +1,6 @@
 [project]
 name = "sokudan"
-version = "0.1.1"
+version = "0.2.0"
 description = "Japanese System One decision model: typed answers + calibrated probabilities in a single forward pass, no text generation."
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
@@ -34,6 +34,7 @@ dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
   "ruff>=0.6",
+  "pytest-cov>=5.0",
 ]
 serve = [
   "fastapi>=0.115",
@@ -44,6 +45,9 @@ bench = [
   "laya>=0.1",
   "scikit-learn>=1.5",
 ]
+
+[project.scripts]
+sokudan = "sokudan.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/hiroki-abe-58/sokudan"

@@ -65,10 +65,37 @@ class Backbone(nn.Module):
         *,
         attn_implementation: str = "sdpa",
         dtype: torch.dtype = torch.float32,
+        local_attention: int | None = None,
     ) -> Backbone:
-        model = AutoModel.from_pretrained(
-            model_id, attn_implementation=attn_implementation, dtype=dtype
-        )
+        """Load the pretrained backbone, optionally with a different local window.
+
+        `local_attention` is the only place the window is overridden; everything that
+        builds or restores a model passes it through here. `None` keeps the pretrained
+        value (128 for modernbert-ja-310m) and takes exactly the code path v0.1 used.
+
+        The override goes into the config *before* the model is built. ModernBERT
+        reads the window twice: each sliding layer caches `config.sliding_window + 1`
+        at construction (the flash-attention path), and the SDPA mask is built from
+        `config.sliding_window` at forward time. Setting it afterwards would change
+        the SDPA mask but not the cached value, and the two would disagree.
+
+        Note what the number means in transformers 5.x: `local_attention` is the
+        *total* window and `sliding_window = local_attention // 2`, so 1024 lets a
+        token see +-512 positions. Sliding layers keep their own RoPE base
+        (`rope_parameters["sliding_attention"]`, 10,000) either way, so widening the
+        window does not turn them into copies of the global layers (160,000).
+        """
+        if local_attention is None:
+            model = AutoModel.from_pretrained(
+                model_id, attn_implementation=attn_implementation, dtype=dtype
+            )
+        else:
+            config = AutoConfig.from_pretrained(model_id)
+            config.local_attention = int(local_attention)
+            model = AutoModel.from_pretrained(
+                model_id, config=config, attn_implementation=attn_implementation,
+                dtype=dtype,
+            )
         return cls(model, BackboneSpec.from_config(model.config))
 
     @classmethod

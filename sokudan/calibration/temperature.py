@@ -32,18 +32,39 @@ def apply_temperature(probs: np.ndarray, temperature: float) -> np.ndarray:
     return scaled / scaled.sum(axis=1, keepdims=True)
 
 
-def _minimize_scalar():
-    """Imported at call time so that installing the package does not require scipy.
+# Golden-section search rather than `scipy.optimize.minimize_scalar`.
+#
+# scipy was the only dependency outside the core set that a *documented* step needed:
+# the module-level import was made lazy in 0.1.1 after `pip install sokudan` followed by
+# `predict()` raised ModuleNotFoundError, but that only moved the crash from import time
+# to `sokudan calibrate`, which the model card's Quickstart tells people to run. Adding
+# scipy to the core dependencies would put a wheel on every install to serve one bounded
+# 1-D minimisation, so the minimisation is here instead.
+#
+# The objective is NLL as a function of one positive scalar, unimodal on T_BOUNDS, which
+# is exactly what golden-section handles. It needs no derivative and one evaluation per
+# iteration, and `tests/test_temperature.py` pins the result against the cases scipy used
+# to pass.
+_GOLDEN = (5**0.5 - 1) / 2
 
-    `apply_temperature` is a division in log space and is what `sokudan.predict`
-    calls on every request. Fitting is a separate, offline job. A module-level
-    `from scipy.optimize import minimize_scalar` made `pip install sokudan` followed
-    by `agent.predict(...)` fail with ModuleNotFoundError, which a clean-venv install
-    check caught.
-    """
-    from scipy.optimize import minimize_scalar
 
-    return minimize_scalar
+def _minimise_scalar(objective, bounds: tuple[float, float], xatol: float = 1e-4) -> float:
+    """Return the minimiser of a unimodal `objective` on `bounds`."""
+    low, high = bounds
+    c, d = high - _GOLDEN * (high - low), low + _GOLDEN * (high - low)
+    fc, fd = objective(c), objective(d)
+    # Each iteration shrinks the bracket by the golden ratio, so the loop is bounded:
+    # from the default bounds it reaches xatol in about 27 steps.
+    while high - low > xatol:
+        if fc < fd:
+            high, d, fd = d, c, fc
+            c = high - _GOLDEN * (high - low)
+            fc = objective(c)
+        else:
+            low, c, fc = c, d, fd
+            d = low + _GOLDEN * (high - low)
+            fd = objective(d)
+    return (low + high) / 2
 
 
 def fit_temperature(probs: np.ndarray, labels: np.ndarray) -> float:
@@ -53,13 +74,9 @@ def fit_temperature(probs: np.ndarray, labels: np.ndarray) -> float:
     if len(labels) == 0:
         raise ValueError("cannot fit a temperature on an empty set")
 
-    result = _minimize_scalar()(
-        lambda t: nll(apply_temperature(probs, t), labels),
-        bounds=T_BOUNDS,
-        method="bounded",
-        options={"xatol": 1e-4},
-    )
-    return float(result.x)
+    return float(_minimise_scalar(
+        lambda t: nll(apply_temperature(probs, t), labels), T_BOUNDS,
+    ))
 
 
 @dataclass

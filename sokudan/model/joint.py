@@ -50,12 +50,32 @@ class JointBatch:
     ordered: Tensor
 
 
+def gather_marker_states(hidden: Tensor, positions: Tensor,
+                         positions_back: Tensor | None = None) -> Tensor:
+    """`(N, M, H)` marker states; with `positions_back`, the mean of the two positions.
+
+    The one place a `sandwich` sequence's two copies of each slot become one state.
+    Everything downstream -- the scorer, the softmax, the ordinal head -- sees the same
+    `(N, M, H)` tensor as for a single block, so choice, score and bool share it.
+    """
+    front = DecisionHead.gather_markers(hidden, positions)
+    if positions_back is None:
+        return front
+    if positions_back.shape != positions.shape:
+        raise ValueError(f"back positions {tuple(positions_back.shape)} do not pair with "
+                         f"{tuple(positions.shape)}")
+    return (front + DecisionHead.gather_markers(hidden, positions_back)) / 2
+
+
 class SokudanJointModel(nn.Module):
     """Backbone + marker scorer + the shared ordinal head. No decision head."""
 
     def __init__(self, backbone: Backbone, *, scorer_init_std: float = 0.002,
-                 use_ordinal: bool = True) -> None:
+                 use_ordinal: bool = True, input_order: str = "question_first") -> None:
         super().__init__()
+        # Not a parameter: the block order the model is trained and scored in. Kept
+        # on the model so a restored checkpoint carries it to `run_model`'s check.
+        self.input_order = input_order
         spec = backbone.spec
         self.backbone = backbone
         self.spec = spec
@@ -78,6 +98,8 @@ class SokudanJointModel(nn.Module):
         attn_implementation: str = "sdpa",
         dtype: torch.dtype = torch.float32,
         use_ordinal: bool = True,
+        local_attention: int | None = None,
+        input_order: str = "question_first",
     ) -> SokudanJointModel:
         from sokudan.config import BACKBONE_MODEL_ID
 
@@ -85,8 +107,9 @@ class SokudanJointModel(nn.Module):
             model_id or BACKBONE_MODEL_ID,
             attn_implementation=attn_implementation,
             dtype=dtype,
+            local_attention=local_attention,
         )
-        return cls(backbone, use_ordinal=use_ordinal)
+        return cls(backbone, use_ordinal=use_ordinal, input_order=input_order)
 
     @property
     def hidden_size(self) -> int:
@@ -99,6 +122,7 @@ class SokudanJointModel(nn.Module):
         marker_positions: Tensor,
         marker_mask: Tensor,
         ordered: Tensor,
+        marker_positions_back: Tensor | None = None,
     ) -> SokudanOutput:
         """
         Args:
@@ -123,7 +147,10 @@ class SokudanJointModel(nn.Module):
         hidden = self.backbone(input_ids, attention_mask)
         # Reused from the separate arm: the bounds check there explains that a marker
         # drifting from where the encoder put it fails silently otherwise.
-        marker_states = DecisionHead.gather_markers(hidden, marker_positions)
+        if (marker_positions_back is not None) != (self.input_order == "sandwich"):
+            raise ValueError("back marker positions are required for, and only for, "
+                             f"`sandwich`; this model is {self.input_order!r}")
+        marker_states = gather_marker_states(hidden, marker_positions, marker_positions_back)
         logits = self.scorer(marker_states).squeeze(-1)
 
         ordered = ordered.to(torch.bool)

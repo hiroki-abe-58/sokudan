@@ -75,7 +75,8 @@ def main() -> int:
 
     model, encoding, device = load_checkpoint(args.checkpoint)
     tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID)
-    config = TrainConfig(device=device, batch_size=args.batch_size, encoding=encoding)
+    config = TrainConfig(device=device, batch_size=args.batch_size, encoding=encoding,
+                         input_order=getattr(model, "input_order", "question_first"))
     collator = build_collator(tokenizer, config)
 
     rows = rows_from_documents(Path(args.docs))

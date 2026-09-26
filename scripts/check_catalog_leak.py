@@ -44,6 +44,11 @@ from sokudan.eval.bench_ja import DEPARTMENTS, URGENCY_LEVELS
 BENCH_TERMS = [
     "解約", "契約終了", "契約の終了", "契約解除", "解除", "退会", "脱退",
     "乗り換え", "乗換", "他社", "他のサービス", "競合", "別の会社", "よその会社",
+    # Added with the Day 3 expansion. Several new tier-I attributes are about
+    # ending or not continuing *something* -- closing a topic, declining, holding
+    # back. None of them may drift into ending the business relationship, which is
+    # what bench_ja's boolean asks about, so the near-synonyms are banned by name.
+    "取引終了", "継続しない", "更新しない", "取引を終", "契約を続け", "利用をやめ",
 ]
 
 BENCH_INSTRUCTIONS = {
@@ -81,7 +86,10 @@ def walk_catalog() -> Iterator[tuple[str, str, str]]:
                 for form in forms:
                     yield f"{base}.surface_forms[{key}]", "label", form
 
-    for attribute in ia.ATTRIBUTES:
+    # Retired attributes too: they are out of the training catalogue but can still be
+    # sent to a generator (`build_intent_corpus.py --include-retired`), and a leak in a
+    # generation condition reaches the corpus whether or not anything trains on it.
+    for attribute in ia.ALL_ATTRIBUTES:
         base = f"intent:{attribute.id}"
         for index, form in enumerate(attribute.forms):
             yield f"{base}.forms[{index}]", "instructions", form
@@ -133,7 +141,7 @@ def check_intent_catalog() -> dict[str, Any]:
     problems: list[str] = []
 
     seen_forms: dict[str, str] = {}
-    for attribute in ia.ATTRIBUTES:
+    for attribute in ia.ALL_ATTRIBUTES:
         for form in [*attribute.forms, attribute.negation_form]:
             if form in seen_forms and seen_forms[form] != attribute.id:
                 problems.append(
@@ -157,6 +165,13 @@ def check_intent_catalog() -> dict[str, Any]:
         for name in (left, right):
             if name not in ia.BY_ID:
                 problems.append(f"exclusive pair names nothing: {name}")
+    for left, right in ia.RETIRED_EXCLUSIVE_PAIRS:
+        for name in (left, right):
+            if name not in ia.ALL_BY_ID:
+                problems.append(f"retired exclusive pair names nothing: {name}")
+    still_active = sorted({a.id for a in ia.RETIRED} & set(ia.BY_ID))
+    if still_active:
+        problems.append(f"retired attributes still in the catalogue: {still_active}")
 
     # A trainable attribute whose every conflict partner is also trainable is fine;
     # what would break selection is a *held-out* attribute conflicting with so much
@@ -184,7 +199,8 @@ def main() -> int:
     consistency = check_intent_catalog()
 
     print(f"scanned {leak['strings_scanned']} catalogue strings "
-          f"({len(CATALOG)} domains, {len(ia.ATTRIBUTES)} intent attributes)")
+          f"({len(CATALOG)} domains, {len(ia.ATTRIBUTES)} intent attributes "
+          f"+ {len(ia.RETIRED)} retired)")
 
     for key, label in (
         ("bench_term_hits", "bench_ja 語彙"),

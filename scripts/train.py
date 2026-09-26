@@ -67,6 +67,7 @@ def write_report(run_dir: Path, result: dict[str, Any], args: argparse.Namespace
 | seed | {config['seed']} |
 | epochs | {config['epochs']} |
 | batch_size | {config['batch_size']} |
+| grad_accum | {config.get('grad_accum', 1)} |
 | learning_rate (backbone) | {config['learning_rate']} |
 | learning_rate (head) | {config['head_learning_rate']} |
 | weight_decay | {config['weight_decay']} |
@@ -112,6 +113,51 @@ def write_report(run_dir: Path, result: dict[str, Any], args: argparse.Namespace
     return path
 
 
+def save_checkpoint(model: torch.nn.Module, path: Path, *, head_layers: int,
+                    encoding: str) -> Path:
+    """Write weights plus what it takes to rebuild the model around them.
+
+    `local_attention` is read from the built backbone, not from the command line, so
+    the checkpoint records the window the weights were actually trained under. The
+    state dict does not carry it -- the window is config, not a parameter -- and a
+    loader that fell back to the pretrained config would silently evaluate at 128.
+    """
+    torch.save(
+        {"state_dict": model.state_dict(),
+         "config": {"n_head_layers": head_layers,
+                    "backbone": BACKBONE_MODEL_ID,
+                    "encoding": encoding,
+                    "local_attention": model.backbone.spec.local_attention,
+                    "input_order": getattr(model, "input_order", "question_first")}},
+        path,
+    )
+    return path
+
+
+def build_model(args: argparse.Namespace) -> torch.nn.Module:
+    """Build the model, unseeded -- `train` seeds before anything else.
+
+    The scorer's random initialisation (`nn.init.normal_`, std 0.002, the only parameter
+    drawn at construction; docs/regression_check.md §8) therefore comes from an unseeded
+    generator and differs from run to run whatever `--seed` says. That is deliberate:
+    from 2026-09-26 (f75e3f2) this function seeded first, and the pre-registered 16 vs 16
+    check found the seeded code lower on held-out M1m (p = 0.047,
+    docs/regression_check.md §10), so the order was put back to the one every baseline
+    run (v0.1 seeds 0-15) was trained with. The data order and everything after
+    construction follow `--seed` either way.
+    """
+    if args.encoding == "joint":
+        from sokudan.model.joint import SokudanJointModel
+
+        return SokudanJointModel.from_pretrained_backbone(
+            use_ordinal=not args.no_ordinal, local_attention=args.local_attention,
+            input_order=args.input_order,
+        )
+    return SokudanModel.from_pretrained_backbone(
+        n_head_layers=args.head_layers, local_attention=args.local_attention,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--train", default="data/train.jsonl")
@@ -131,9 +177,43 @@ def main() -> int:
                         help="ablation: score rows use the plain softmax")
     parser.add_argument("--encoding", choices=("separate", "joint"),
                         default="separate")
+    parser.add_argument(
+        "--local-attention", type=int, default=None,
+        help="override the backbone's sliding-window size (total width; 1024 = +-512). "
+             "Default keeps the pretrained value (128) and v0.1's exact code path.",
+    )
+    parser.add_argument(
+        "--input-order", choices=("question_first", "state_first", "sandwich"),
+        default="question_first",
+        help="joint arm: block order. Default is v0.1's (question, then state).",
+    )
+    parser.add_argument(
+        "--distill-targets", default=None,
+        help="teacher targets (.npz) for distillation (docs/distill.md); default: off",
+    )
+    parser.add_argument("--distill-alpha", type=float, default=0.5,
+                        help="label-loss weight when distilling (the KL gets 1 - alpha)")
+    parser.add_argument(
+        "--grad-accum", type=int, default=1,
+        help="micro-batches per optimizer step (memory fallback; 1 = the plain loop)",
+    )
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--save", action="store_true", help="write the checkpoint")
+    parser.add_argument(
+        "--max-vram-fraction", type=float, default=None,
+        help="cap this process's share of device memory (e.g. 0.9). On Windows, running "
+             "past dedicated VRAM does not raise OOM -- the driver pages to system memory "
+             "and training slows several-fold -- so a cap turns that into allocator "
+             "reclaim instead. Memory policy only; it does not change the arithmetic.",
+    )
     args = parser.parse_args()
+
+    if args.max_vram_fraction and args.device.startswith("cuda"):
+        # v0.4 crept from 27.6 to 32.1 GB of a 32.6 GB card mid-epoch and dropped from
+        # 8.1 to 1.1 steps/s: the caching allocator kept blocks from long-sequence
+        # batches until the driver started paging. Under a cap the allocator frees its
+        # cache and retries before failing, which is what it should have done anyway.
+        torch.cuda.set_per_process_memory_fraction(args.max_vram_fraction)
 
     from transformers import AutoTokenizer
 
@@ -143,14 +223,10 @@ def main() -> int:
         train_examples = train_examples[: args.limit]
 
     tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID)
-    if args.encoding == "joint":
-        from sokudan.model.joint import SokudanJointModel
-
-        model = SokudanJointModel.from_pretrained_backbone(
-            use_ordinal=not args.no_ordinal
-        )
-    else:
-        model = SokudanModel.from_pretrained_backbone(n_head_layers=args.head_layers)
+    model = build_model(args)
+    print(f"input_order = {getattr(model, 'input_order', 'question_first')}")
+    print(f"backbone local_attention = {model.backbone.spec.local_attention} "
+          f"({'override' if args.local_attention is not None else 'pretrained'})")
 
     config = TrainConfig(
         seed=args.seed,
@@ -162,23 +238,29 @@ def main() -> int:
         ordinal_weight=args.ordinal_weight,
         device=args.device,
         encoding=args.encoding,
+        input_order=args.input_order,
+        grad_accum=args.grad_accum,
+        distill_targets=args.distill_targets,
+        distill_alpha=args.distill_alpha,
     )
 
     run_dir = Path(args.runs_dir) / args.run_id
-    result = train(model, tokenizer, train_examples, val_examples, config, run_dir=run_dir)
+    teacher = None
+    if args.distill_targets:
+        from sokudan.train.distill import load_targets
+
+        # Checked against the training file line by line; --limit keeps a prefix.
+        teacher = load_targets(args.distill_targets, args.train)
+        print(f"distilling from {args.distill_targets} (alpha {args.distill_alpha})")
+    result = train(model, tokenizer, train_examples, val_examples, config, run_dir=run_dir,
+                   teacher=teacher)
 
     report = write_report(run_dir, result, args)
     print(f"\nreport -> {report}")
 
     if args.save:
-        checkpoint = run_dir / "model.pt"
-        torch.save(
-            {"state_dict": model.state_dict(),
-             "config": {"n_head_layers": args.head_layers,
-                        "backbone": BACKBONE_MODEL_ID,
-                        "encoding": args.encoding}},
-            checkpoint,
-        )
+        checkpoint = save_checkpoint(model, run_dir / "model.pt",
+                                     head_layers=args.head_layers, encoding=args.encoding)
         print(f"checkpoint -> {checkpoint}")
 
     print(json.dumps(result["after"], ensure_ascii=False, indent=2))

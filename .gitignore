@@ -37,3 +37,11 @@ hf_cache/
 # os
 Thumbs.db
 .DS_Store
+
+# coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# length 2x2 generated corpora and training sets (docs/length_2x2.md records counts and sha256)
+data/l2x2/

@@ -10,15 +10,41 @@ hallucination to live.
 - Licence: Apache-2.0
 - Built on a single RTX 5090 (Blackwell, sm_120)
 
-> **Status: v0.1, built in a two-day sprint on 2026-09-20/21.**
-> Published at [`GeneLab/sokudan-ja-310m`](https://huggingface.co/GeneLab/sokudan-ja-310m).
+> **Status: v0.2 (2026-09-27),** a model soup: the average of eight models trained exactly as v0.1 (a two-day sprint on 2026-09-20/21) was.
+> Published at [`GeneLab/sokudan-ja-310m`](https://huggingface.co/GeneLab/sokudan-ja-310m) (v0.1 is revision `v0.1`).
 > **Every number in this README is the output of code run on that machine.** None are
 > estimates. Anything unmeasured is written as "not measured".
 
 *This is a translation of [`README.md`](README.md). The Japanese version is
 authoritative; if the two disagree, the Japanese one is right.*
 
-## `bench_ja`, 300 items, mean ± standard deviation over 3 seeds
+## v0.2 — a model soup of v0.1's eight seeds
+
+v0.2 is the plain average of the weights of eight models (seeds 0-7), each trained exactly as v0.1 was.
+Architecture, training data and inference code are v0.1's, and inference costs one model.
+The combination to ship was chosen by a rule fixed in advance ([`docs/release_candidate.md`](docs/release_candidate.md)),
+and `bench_ja` was measured once, after the release rule was committed.
+
+`bench_ja`, 300 items (uncalibrated; v0.1 is the mean ± SD over three seeds, **v0.2 is one run of one soup**):
+
+| | choice acc | score RPS↓ | score acc | bool acc | bool AUROC |
+|---|---|---|---|---|---|
+| **v0.2** | **0.880** | **0.075** | **0.817** | 0.780 | **0.844** |
+| v0.1 | 0.847 ± 0.009 | 0.090 ± 0.023 | 0.763 ± 0.088 | 0.788 ± 0.010 | 0.789 ± 0.043 |
+
+- **bool accuracy is 0.008 lower than v0.1's.**
+  - `bool` under-predicts true (mean P(true) 0.133 against a gold rate of 0.297).
+  - Set the threshold from your own prior.
+- English (`bench_en`, 290 items; trained on Japanese only): choice 0.872, score RPS 0.114, bool accuracy 0.690 (majority class: 0.683).
+- **How the soup is made**:
+  - Every floating tensor of the eight checkpoints is averaged in float32, heads included.
+  - `scripts/make_soup.py` averages them by the same rule and checks the members' and the soup's SHA-256.
+  - The member checkpoints are not distributed. Retraining does not reproduce the same weights (the scorer's initial values do not follow the seed, and the GPU is nondeterministic).
+- **To keep using v0.1**: `sokudan.load("GeneLab/sokudan-ja-310m@v0.1")`.
+- Every metric is in [`docs/benchmarks.md`](docs/benchmarks.md) §10 and the model card.
+- The limits, including position sensitivity, are under Limits below.
+
+## `bench_ja`, 300 items, mean ± standard deviation over 3 seeds (v0.1)
 
 | model | choice acc | score RPS↓ | bool acc | bool AUROC |
 |---|---|---|---|---|
@@ -29,7 +55,7 @@ authoritative; if the two disagree, the Japanese one is right.*
 
 Every metric, calibrated and uncalibrated, plus the per-seed values, is in
 [`docs/benchmarks.md`](docs/benchmarks.md). **`score` varies a lot across seeds**: the
-published weights are seed 0, whose own figures are acc 0.663 / RPS 0.117.
+v0.1 weights (revision `v0.1`) are seed 0, whose own figures are acc 0.663 / RPS 0.117.
 
 ---
 
@@ -91,7 +117,7 @@ import sokudan
 
 agent = sokudan.load("GeneLab/sokudan-ja-310m")     # or a local runs/.../model.pt
 result = agent.predict(
-    {"body": "先月の請求で同じ金額が二回引き落とされています。至急ご確認ください。"},
+    "先月の請求で同じ金額が二回引き落とされています。至急ご確認ください。",   # pass the state as a string
     {
         "department": {"type": "choice",
                        "instructions": "この問い合わせはどの部署が担当すべきか",
@@ -106,6 +132,11 @@ result = agent.predict(
 )
 print(result["answers"]["department"]["choice"])
 ```
+
+> **Pass the state as a string.** A dict (for example `{"body": ...}`) is rendered as
+> `key: value` lines (`body: 先月の…`), which is not the input the model was trained and
+> evaluated on (the text itself), and the output changes: on one held-out item P(true) went
+> from 0.318 (string) to 0.145 (`{"body": ...}`).
 
 Question types are `choice` / `score` / `bool` (`noul` is an alias). The schema is
 free per request; no retraining is needed.
@@ -213,9 +244,23 @@ All with reproduction commands and raw JSON.
 
 ## Limits (honestly)
 
+**On v0.2** (numbers: [`docs/benchmarks.md`](docs/benchmarks.md) §10, [`docs/release_candidate.md`](docs/release_candidate.md) §5-§6):
+
+- **v0.2's `bench_ja` numbers are one run of one soup**, with no spread attached.
+- **On a four-level `score`, the first option is almost never chosen.**
+  - In condition E of the `bench_ja` position probe, v0.2 chose the first option for **5 of 300** items (v0.1's three seeds: 58 / 16 / 62), with accuracy 0.347.
+  - In the three-level conditions A-D, the first option is chosen 78-99 times.
+- **On held-out states the first slot is still slightly disfavoured** (the definitions of Laya's presentation checks, 30 states).
+  - Identical-option control: score -0.249, choice -0.280 (0 is neutral).
+  - First-slot rate over all orders: score 0.239, choice 0.289 (1/3 when order does not matter).
+- **bool accuracy is lower than v0.1's (0.780 vs 0.788), and true is under-predicted.** Set the threshold from your own prior.
+- **Passing the state as a dict changes the output** (see the note under Quickstart).
+
+**Carried over from v0.1**:
+
 - **These are means ± standard deviations over 3 seeds** (0 / 1 / 2). But **`score`
   varies a lot across seeds**: acc is 0.663 / 0.800 / 0.827 (SD 0.088). The mean 0.763
-  **is not any seed's measured value**. **The published weights are seed 0**, whose
+  **is not any seed's measured value**. **The v0.1 weights (revision `v0.1`) are seed 0**, whose
   figures are score acc 0.663 / RPS 0.117.
 - **`bool` under-predicts true.** Mean P(true) is 0.125 against a gold positive rate of
   0.297. AUROC 0.789 means **the ranking works**, but **the threshold sits in the wrong

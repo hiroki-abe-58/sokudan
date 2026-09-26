@@ -5,10 +5,12 @@
 Reads `data/docs_v2.jsonl` (documents plus gold labels plus the verifier's verdicts)
 and writes three files:
 
-    data/train_v2.jsonl         training rows, trainable attributes only
-    data/val_v2.jsonl           validation rows, trainable attributes only
-    data/heldout_val_v2.jsonl   validation rows, held-out attributes only
-    data/rejected_v2.jsonl      every pair the verifier disagreed with
+    data/train_<tag>.jsonl        training rows, trainable attributes only
+    data/val_<tag>.jsonl          validation rows, trainable attributes only
+    data/heldout_val_<tag>.jsonl  validation rows, held-out attributes only
+    data/rejected_<tag>.jsonl     every pair the verifier disagreed with
+
+`--tag` defaults to `v2`, so the Day 2 invocation is unchanged.
 
 Rejected pairs are **kept on disk**. Dropping them silently would make it impossible
 to answer, later, whether discarding helped or merely deleted the hard cases -- and
@@ -67,9 +69,20 @@ def partition(documents: list[dict[str, Any]]) -> tuple[list[dict], list[dict], 
     counts: dict[str, Counter] = defaultdict(Counter)
     by_split: dict[tuple[str, str], Counter] = defaultdict(Counter)
 
+    # Attributes that were in the catalogue when a corpus was generated and have since
+    # been removed. Day 3 dropped `uses_plain_form` after the smoke test, which made
+    # every document generated before that point unreadable with a KeyError. Merging an
+    # older corpus is the normal case here, so the labels are dropped and counted rather
+    # than crashing -- but they are printed, because silently ignoring a label is how a
+    # corpus quietly shrinks without anyone noticing.
+    retired: Counter = Counter()
+
     for document in documents:
         verdicts = document.get("verdicts") or {}
         for attribute_id, gold in document["intent_labels"].items():
+            if attribute_id not in ia.BY_ID:
+                retired[attribute_id] += 1
+                continue
             answer = verdicts.get(attribute_id)
             counts[attribute_id]["total"] += 1
             split_counter = by_split[(attribute_id, document["split"])]
@@ -127,13 +140,23 @@ def partition(documents: list[dict[str, Any]]) -> tuple[list[dict], list[dict], 
             "n_train": by_split.get((attribute_id, "train"), Counter())["total"],
             "n_val": by_split.get((attribute_id, "val"), Counter())["total"],
         }
+    if retired:
+        total = sum(retired.values())
+        print(f"カタログから消えた属性のラベルを {total} 件無視しました: "
+              f"{dict(retired.most_common())}")
     return kept, rejected, report
 
 
+# Five, from the measurement in `rebalance`'s docstring: on the third smoke corpus
+# three strata take the worst attribute from +0.531 to +0.273 and five take it to
+# +0.181, for 7% of the rows against 4.6%. Purity outranks coverage here.
+LENGTH_STRATA = 5
+
+
 def rebalance(
-    kept: list[dict[str, Any]], rng: random.Random
+    kept: list[dict[str, Any]], rng: random.Random, *, strata: int = LENGTH_STRATA
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Restore a 40-60% positive rate per attribute and split, after discarding.
+    """Restore a 40-60% positive rate per attribute and split, within length strata.
 
     Discarding is not neutral. The verifier disagrees far more often on negatives --
     a document written to imply nothing still reads as implying something -- so
@@ -141,8 +164,17 @@ def rebalance(
     head a prior toward "yes". That is the same mistake Day 1 made from the other
     direction, where `bool` learned "always false" and scored 0.683 on it.
 
+    Balancing *within length strata* closes the other shortcut. A document written to
+    carry an attribute has more to say than one written to avoid it, so a true label
+    and a longer body arrive together: measured on the third smoke corpus, the pooled
+    point-biserial r(length, label) over surviving rows is +0.117, and three attributes
+    pass 0.30 on their own -- `implies_first_time` reaches +0.531, because the
+    instruction that fixed its discard rate also told the generator to write more.
+    A head can score those attributes by counting characters. Balancing each attribute
+    separately inside each length tertile leaves nothing for that count to predict.
+
     Subsampling the majority side costs volume and nothing else, which is the right
-    currency to pay in.
+    currency to pay in -- and it is the currency for this too.
     """
     groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for pair in kept:
@@ -151,27 +183,46 @@ def rebalance(
     out: list[dict[str, Any]] = []
     report: dict[str, Any] = {}
     for (attribute_id, split), group in sorted(groups.items()):
-        positives = [p for p in group if p["label"] == 1]
-        negatives = [p for p in group if p["label"] == 0]
-        before = len(positives) / max(len(group), 1)
-        if not positives or not negatives:
+        before = sum(p["label"] for p in group) / max(len(group), 1)
+
+        # Cut this attribute's own rows into equal-count length strata. Per attribute
+        # rather than globally, because the attributes do not share a length
+        # distribution and a global cut would leave some of them inside one stratum.
+        ordered = sorted(group, key=lambda p: len(p["state"]))
+        n_strata = max(1, min(strata, len(ordered) // 8))
+        # Contiguous blocks of the length-sorted rows, so each stratum is a narrow band
+        # of lengths. Slicing with a step would give every bucket the full range and
+        # balance nothing.
+        edges = [round(i * len(ordered) / n_strata) for i in range(n_strata + 1)]
+        buckets = [ordered[a:b] for a, b in zip(edges[:-1], edges[1:], strict=True)]
+
+        chosen: list[dict[str, Any]] = []
+        for bucket in buckets:
+            positives = [p for p in bucket if p["label"] == 1]
+            negatives = [p for p in bucket if p["label"] == 0]
+            if not positives or not negatives:
+                # A stratum with only one label cannot be balanced, and keeping it
+                # would reintroduce exactly the correlation this is removing.
+                continue
+            minority, majority = sorted((positives, negatives), key=len)
+            limit = int(len(minority) * POSITIVE_HIGH / POSITIVE_LOW)
+            keep_majority = min(len(majority), max(len(minority), limit))
+            rng.shuffle(majority)
+            chosen.extend(minority + majority[:keep_majority])
+
+        if not chosen:
             report[f"{attribute_id}/{split}"] = {
                 "before": round(before, 4), "after": round(before, 4),
                 "kept": 0, "dropped": len(group), "constant": True,
             }
             continue
 
-        # Largest prefix of the majority side that still lands inside [0.40, 0.60].
-        minority, majority = sorted((positives, negatives), key=len)
-        limit = int(len(minority) * POSITIVE_HIGH / POSITIVE_LOW)
-        keep_majority = min(len(majority), max(len(minority), limit))
-        rng.shuffle(majority)
-        chosen = minority + majority[:keep_majority]
         after = sum(p["label"] for p in chosen) / len(chosen)
         out.extend(chosen)
         report[f"{attribute_id}/{split}"] = {
             "before": round(before, 4), "after": round(after, 4),
-            "kept": len(chosen), "dropped": len(group) - len(chosen), "constant": False,
+            "kept": len(chosen), "dropped": len(group) - len(chosen),
+            "constant": False, "strata": n_strata,
         }
     return out, report
 
@@ -432,6 +483,11 @@ def write(path: Path, rows: list[dict[str, Any]]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--docs", type=str, default="data/docs_v2.jsonl")
+    # The output names carry a tag so a second corpus does not overwrite the first.
+    # Day 3 builds from v2+v3+v4 merged; writing that over data/train_v2.jsonl would
+    # destroy the only copy of what v0.1 was trained on.
+    parser.add_argument("--tag", type=str, default="v2",
+                        help="suffix for the written files, e.g. --tag v4")
     parser.add_argument("--out-dir", type=str, default="data")
     parser.add_argument("--intent-views", type=int, default=2)
     parser.add_argument("--domain-variants", type=int, default=4)
@@ -494,7 +550,7 @@ def main() -> int:
         print("  val 文書は 8 属性条件・held-out 強制（§5.1）。差はその副作用の大きさ")
 
     out_dir = Path(args.out_dir)
-    write(out_dir / "rejected_v2.jsonl", rejected)
+    write(out_dir / f"rejected_{args.tag}.jsonl", rejected)
 
     kept = [pair for pair in kept if pair["attribute"] not in over]
     kept, balance_report = rebalance(kept, rng)
@@ -540,9 +596,9 @@ def main() -> int:
               f"domain bool {share_report['domain_bool']['after']} 維持)")
 
     rng.shuffle(train_rows)
-    write(out_dir / "train_v2.jsonl", train_rows)
-    write(out_dir / "val_v2.jsonl", val_rows)
-    write(out_dir / "heldout_val_v2.jsonl", heldout_rows)
+    write(out_dir / f"train_{args.tag}.jsonl", train_rows)
+    write(out_dir / f"val_{args.tag}.jsonl", val_rows)
+    write(out_dir / f"heldout_val_{args.tag}.jsonl", heldout_rows)
 
     leak = row_leak_check(train_rows + val_rows + heldout_rows)
     train_ids = {r["doc_id"] for r in train_rows}
@@ -582,7 +638,7 @@ def main() -> int:
         "no_augment": args.no_augment,
         "bench_ja_leakage": leak,
     }
-    (out_dir / "manifest_v2.json").write_text(
+    (out_dir / f"manifest_{args.tag}.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 

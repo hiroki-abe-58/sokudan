@@ -79,6 +79,7 @@ class SokudanModel(nn.Module):
         n_head_layers: int = 2,
         attn_implementation: str = "sdpa",
         dtype: torch.dtype = torch.float32,
+        local_attention: int | None = None,
     ) -> SokudanModel:
         from sokudan.config import BACKBONE_MODEL_ID
 
@@ -86,6 +87,7 @@ class SokudanModel(nn.Module):
             model_id or BACKBONE_MODEL_ID,
             attn_implementation=attn_implementation,
             dtype=dtype,
+            local_attention=local_attention,
         )
         return cls(backbone, n_head_layers=n_head_layers)
 

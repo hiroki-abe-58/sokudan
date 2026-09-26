@@ -60,13 +60,26 @@ def load_rows(path: Path) -> list[dict[str, Any]]:
     ]
 
 
-def load_checkpoint(path: str) -> tuple[Any, str, str]:
+def load_checkpoint(path: str, *, local_attention: int | None = None,
+                    input_order: str | None = None) -> tuple[Any, str, str]:
     """Load either arm. The checkpoint says which one it is; nothing is guessed.
 
     `scripts/train.py` records `encoding` in the checkpoint config, so a joint
     checkpoint cannot be scored through the separate collator (or the reverse) by
     forgetting a flag -- which would silently produce a number for an architecture
     that was never trained.
+
+    The same goes for the attention window: a checkpoint trained with
+    `--local-attention` records it, and it is restored here. Checkpoints from before
+    the flag existed have no entry and load at the pretrained value, which is what
+    they were trained at. An explicit `local_attention` overrides the stored value --
+    for inference-only wiring checks, never for a reported result.
+
+    `input_order` works the same way: restored from the checkpoint (absent means
+    `question_first`, v0.1's order), overridable only for a wiring check. It lands on
+    the model as `model.input_order`; build the collator from that
+    (`TrainConfig(input_order=model.input_order)`), and `run_model` refuses a batch
+    built in the other order.
     """
     from sokudan.config import BACKBONE_MODEL_ID
 
@@ -74,16 +87,23 @@ def load_checkpoint(path: str) -> tuple[Any, str, str]:
     stored = blob.get("config", {})
     backbone_id = stored.get("backbone", BACKBONE_MODEL_ID)
     encoding = stored.get("encoding", "separate")
+    if local_attention is None:
+        local_attention = stored.get("local_attention")
+    if input_order is None:
+        input_order = stored.get("input_order", "question_first")
 
     if encoding == "joint":
         from sokudan.model.joint import SokudanJointModel
 
-        model = SokudanJointModel.from_pretrained_backbone(backbone_id)
+        model = SokudanJointModel.from_pretrained_backbone(
+            backbone_id, local_attention=local_attention, input_order=input_order
+        )
     else:
         from sokudan.model.sokudan import SokudanModel
 
         model = SokudanModel.from_pretrained_backbone(
-            backbone_id, n_head_layers=stored.get("n_head_layers", 2)
+            backbone_id, n_head_layers=stored.get("n_head_layers", 2),
+            local_attention=local_attention,
         )
     model.load_state_dict(blob["state_dict"])
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -134,6 +154,26 @@ def score(
     }
 
 
+def s_tier_gate(
+    by_attribute: dict[str, dict[str, Any]], threshold: float = GATES["S"],
+) -> tuple[bool, list[str], list[str], list[str]]:
+    """The S gate, per attribute: (passed, failing, exempted as positional, judged).
+
+    Each surface attribute in the held-out set must clear `threshold` on its own.
+    Positional attributes (`ia.POSITIONAL_ATTRIBUTES`) are exempt: their answer sits at
+    a fixed place in the text, which `local_attention` may not reach from the option
+    markers, so their AUROC measures where the model looks rather than whether it reads.
+    A held-out set with no non-positional surface attribute passes vacuously; the caller
+    says so rather than reporting a pass.
+    """
+    surface = sorted(n for n, e in by_attribute.items() if e["tier"] == "S")
+    exempted = [n for n in surface if n in ia.POSITIONAL_ATTRIBUTES]
+    judged = [n for n in surface if n not in ia.POSITIONAL_ATTRIBUTES]
+    failing = [n for n in judged
+               if by_attribute[n].get("auroc") is None or by_attribute[n]["auroc"] <= threshold]
+    return not failing, failing, exempted, judged
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", default="runs/s2a/model.pt")
@@ -151,7 +191,8 @@ def main() -> int:
 
     model, encoding, device = load_checkpoint(args.checkpoint)
     tokenizer = AutoTokenizer.from_pretrained(BACKBONE_MODEL_ID)
-    config = TrainConfig(device=device, batch_size=args.batch_size, encoding=encoding)
+    config = TrainConfig(device=device, batch_size=args.batch_size, encoding=encoding,
+                         input_order=getattr(model, "input_order", "question_first"))
     collator = build_collator(tokenizer, config)
 
     rows = load_rows(Path(args.heldout))
@@ -197,10 +238,31 @@ def main() -> int:
         "S": check("S 段（表層）",
                    results["by_tier"].get("S", {}).get("auroc"), GATES["S"]),
     }
+    # The S gate is judged per attribute (docs/benchmarks.md §9, the standing rule since
+    # 2026-09-24): every surface attribute in the held-out set must clear 0.85 on its
+    # own, except positional ones, which are exempt. The pooled tier-S AUROC stays in
+    # `passed` for the record (`all_passed_strict`), but it no longer decides.
+    s_ok, s_failures, s_exempted, s_judged = s_tier_gate(results["by_attribute"])
+    effective = dict(passed)
+    effective["S"] = s_ok
+    if s_exempted:
+        print(f"\n  S 段: 位置依存属性 {s_exempted} は判定から除外")
+    if not s_judged:
+        print("  S 段: 判定する属性（位置依存でない S 段属性）が held-out にない")
+    elif s_failures:
+        print(f"  S 段で未達の属性: {s_failures}")
+    else:
+        print(f"  S 段: {s_judged} すべて {GATES['S']} 超")
+
     results["gates"] = {
         name: {"threshold": GATES[name], "passed": ok} for name, ok in passed.items()
     }
-    results["all_passed"] = all(passed.values())
+    results["gates"]["S_per_attribute"] = {"threshold": GATES["S"], "passed": s_ok}
+    results["s_tier_failures"] = s_failures
+    results["s_tier_exempted"] = bool(s_exempted)
+    results["s_tier_positional"] = s_exempted
+    results["all_passed"] = all(effective.values())
+    results["all_passed_strict"] = all(passed.values())
 
     print("\n属性ごと")
     print(f"  {'attribute':34s} {'tier':5s} {'n':>5s} {'AUROC':>7s} {'acc':>7s} {'P(true)':>8s}")
@@ -215,7 +277,7 @@ def main() -> int:
     print(f"\n-> {out}")
 
     if not results["all_passed"]:
-        failed = [name for name, ok in passed.items() if not ok]
+        failed = [name for name, ok in effective.items() if not ok]
         if failed == ["I"]:
             print("\nI 段のみ未達。表層は転移したが意図は転移していない。"
                   "3 シードには進まず、ここで報告する。")

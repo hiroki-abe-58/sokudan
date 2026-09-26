@@ -1,0 +1,107 @@
+{
+  "model": "sokudan(runs/s0/model.pt)",
+  "n_items": 300,
+  "variants": [
+    {
+      "name": "A 原文",
+      "criteria": [
+        "急がない",
+        "早めに",
+        "業務が止まっている"
+      ],
+      "presented_argmax_counts": [
+        62,
+        39,
+        199
+      ],
+      "first_option_count": 62,
+      "accuracy": 0.38666666666666666,
+      "rps": 0.1947060037854335,
+      "mae_argmax": 0.7433333333333333,
+      "spearman_expectation_vs_gold": 0.30964259730046334
+    },
+    {
+      "name": "B 逆順",
+      "criteria": [
+        "業務が止まっている",
+        "早めに",
+        "急がない"
+      ],
+      "presented_argmax_counts": [
+        95,
+        71,
+        134
+      ],
+      "first_option_count": 95,
+      "accuracy": 0.20666666666666667,
+      "rps": 0.2096009345428516,
+      "mae_argmax": 1.1033333333333333,
+      "spearman_expectation_vs_gold": -0.3164348736651109
+    },
+    {
+      "name": "C 言い換え（低/中/高）",
+      "criteria": [
+        "低",
+        "中",
+        "高"
+      ],
+      "presented_argmax_counts": [
+        8,
+        9,
+        283
+      ],
+      "first_option_count": 8,
+      "accuracy": 0.31,
+      "rps": 0.19739771455435615,
+      "mae_argmax": 0.9166666666666666,
+      "spearman_expectation_vs_gold": 0.28913102890279596
+    },
+    {
+      "name": "D 言い換えの逆順",
+      "criteria": [
+        "高",
+        "中",
+        "低"
+      ],
+      "presented_argmax_counts": [
+        11,
+        7,
+        282
+      ],
+      "first_option_count": 11,
+      "accuracy": 0.23666666666666666,
+      "rps": 0.2138144497864467,
+      "mae_argmax": 1.0633333333333332,
+      "spearman_expectation_vs_gold": -0.30313363107145397
+    },
+    {
+      "name": "E 4段階",
+      "criteria": [
+        "全く急がない",
+        "急がない",
+        "早めに",
+        "業務が止まっている"
+      ],
+      "presented_argmax_counts": [
+        28,
+        23,
+        43,
+        206
+      ],
+      "first_option_count": 28,
+      "accuracy": 0.29333333333333333,
+      "rps": 0.2152911250425019,
+      "mae_argmax": 1.3733333333333333,
+      "spearman_expectation_vs_gold": 0.3246867652039711
+    }
+  ],
+  "first_option_share": [
+    0.20666666666666667,
+    0.31666666666666665,
+    0.02666666666666667,
+    0.03666666666666667,
+    0.09333333333333334
+  ],
+  "verdict": "the first presented option is selected under every schema -- no dead-slot positional bias",
+  "accuracy_spread": 0.18
+}

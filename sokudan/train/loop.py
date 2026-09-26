@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import json
 import math
+import queue
+import threading
 import time
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -76,6 +79,17 @@ class TrainConfig:
     and its diagnostics cannot disagree about which arm produced a number.
     """
     max_joint_tokens: int = 1024
+    input_order: str = "question_first"
+    """Joint arm only: block order (`sokudan.encoding.question.INPUT_ORDERS`)."""
+    grad_accum: int = 1
+    """Micro-batches per optimizer step. 1 is the plain loop, op for op. >1 is the
+    memory fallback (docs/length_2x2.md): same examples per optimizer step with
+    `batch_size` halved, the loss divided by `grad_accum`, one clip and one step per
+    group. The LR schedule counts optimizer steps."""
+    distill_targets: str | None = None
+    """Path of the teacher targets (docs/distill.md). None: no distillation, the plain loss."""
+    distill_alpha: float = 0.5
+    """Weight of the label loss when distilling; the KL term gets 1 - alpha."""
 
 
 @dataclass
@@ -150,9 +164,76 @@ def cosine_schedule(optimizer: torch.optim.Optimizer, total_steps: int, warmup: 
     return apply
 
 
+def accum_group_size(batch_index: int, n_batches: int, accum: int) -> int:
+    """Micro-batches in the optimizer step that `batch_index` belongs to.
+
+    `accum` everywhere except the last group of an epoch, which holds whatever is left.
+    """
+    start = batch_index - batch_index % accum
+    return min(accum, n_batches - start)
+
+
 def _amp_dtype(name: str) -> torch.dtype:
     return {"bfloat16": torch.bfloat16, "float16": torch.float16,
             "float32": torch.float32}[name]
+
+
+def prefetched(groups: list[list[Example]], collator: Any,
+               depth: int = 2) -> Iterator[tuple[list[Example], Any]]:
+    """Yield `(group, collator(group))` in the order of `groups`, collated ahead.
+
+    Performance A1 (docs/perf_a.md): tokenisation and batch assembly run on one
+    background thread while the GPU works on the previous batch. The groups, their
+    order and what each collates to are exactly what a plain loop would produce --
+    one producer, a FIFO queue -- so nothing downstream can tell the difference except
+    the wall clock. The thread is joined before this generator returns (or is closed),
+    so the collator is never used from two threads at once.
+    """
+    q: queue.Queue = queue.Queue(maxsize=depth)
+    stop = threading.Event()
+    done = object()
+
+    def produce() -> None:
+        try:
+            for group in groups:
+                item = (group, collator(group))
+                while not stop.is_set():
+                    try:
+                        q.put(item, timeout=0.1)
+                        break
+                    except queue.Full:
+                        continue
+                if stop.is_set():
+                    return
+            q.put(done)
+        except BaseException as exc:  # handed to the consumer, raised there
+            q.put(exc)
+
+    thread = threading.Thread(target=produce, name="sokudan-collate", daemon=True)
+    thread.start()
+    try:
+        while True:
+            item = q.get()
+            if item is done:
+                return
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+    finally:
+        stop.set()
+        while thread.is_alive():
+            try:
+                q.get(timeout=0.1)
+            except queue.Empty:
+                pass
+        thread.join()
+
+
+def _flush_losses(pending: list[torch.Tensor], running: list[float]) -> None:
+    """Move the losses held on the device into `running`, in order, in one transfer."""
+    if pending:
+        running.extend(float(x) for x in torch.stack(pending).cpu())
+        pending.clear()
 
 
 def build_collator(
@@ -164,9 +245,12 @@ def build_collator(
     never be trained with one encoding and scored with the other.
     """
     if config.encoding == "joint":
-        return JointCollator(tokenizer, max_joint_tokens=config.max_joint_tokens)
+        return JointCollator(tokenizer, max_joint_tokens=config.max_joint_tokens,
+                             input_order=config.input_order)
     if config.encoding != "separate":
         raise ValueError(f"unknown encoding {config.encoding!r}")
+    if config.input_order != "question_first":
+        raise ValueError("input_order applies to the joint arm only")
     return Collator(tokenizer, max_state_tokens=config.max_state_tokens)
 
 
@@ -180,6 +264,19 @@ def run_model(model: nn.Module, batch: Batch | JointBatch) -> SokudanOutput:
     arrangement the tensors are in.
     """
     if isinstance(batch, JointBatch):
+        # A checkpoint trained in one block order and scored in the other would give
+        # a number for an arrangement it never saw, silently. Refuse instead.
+        expected = getattr(model, "input_order", "question_first")
+        if batch.input_order != expected:
+            raise ValueError(
+                f"batch is {batch.input_order!r} but the model was built for {expected!r}"
+            )
+        if batch.marker_positions_back is not None:
+            return model(
+                batch.input_ids, batch.attention_mask,
+                batch.marker_positions, batch.marker_mask, batch.ordered,
+                marker_positions_back=batch.marker_positions_back,
+            )
         return model(
             batch.input_ids, batch.attention_mask,
             batch.marker_positions, batch.marker_mask, batch.ordered,
@@ -199,12 +296,17 @@ def evaluate(
     config: TrainConfig,
     *,
     batch_size: int | None = None,
+    rows_out: list | None = None,
 ) -> dict[str, Any]:
     """Metrics on a held-out split, split by primitive.
 
     Probabilities are collected at full precision. Metrics are computed by
     `sokudan.calibration.metrics` -- the same functions that scored the baselines, so
     the numbers are comparable with `docs/baseline_ja.md` rather than merely similar.
+
+    `rows_out`, when given, receives `(example, probabilities)` for every row -- the
+    same arrays the metrics are computed from -- so a caller that also needs the
+    per-row predictions does not run the model over the set a second time (A5).
     """
     model.eval()
     device = torch.device(config.device)
@@ -220,8 +322,8 @@ def evaluate(
     batches = length_bucketed_batches(
         examples, batch_size, collator.tokenizer, rng=_random.Random(0), shuffle=False
     )
-    for group in batches:
-        batch = collator(group).to(device)
+    for group, cpu_batch in prefetched(batches, collator):
+        batch = cpu_batch.to(device)
         with torch.autocast(device_type=device.type, dtype=amp, enabled=amp != torch.float32):
             out = run_model(model, batch)
         probs = out.probs.float().cpu().numpy()
@@ -231,6 +333,8 @@ def evaluate(
             n_options = int(batch.marker_mask[row].sum())
             buckets[kind]["probs"].append(probs[row, :n_options])
             buckets[kind]["labels"].append(int(labels[row]))
+            if rows_out is not None:
+                rows_out.append((example, probs[row, :n_options]))
 
     model.train()
 
@@ -296,7 +400,15 @@ def train(
     config: TrainConfig,
     *,
     run_dir: Path | None = None,
+    teacher: tuple[np.ndarray, np.ndarray] | None = None,
+    step_hook: Any | None = None,
 ) -> dict[str, Any]:
+    """`teacher` is `(probabilities, option counts)` in `train_examples` order
+    (`sokudan.train.distill.load_targets`); None trains on the labels alone.
+
+    `step_hook(epoch, batch_index, group, loss)` is called after every micro-batch with
+    the detached loss tensor; it is for recording (`scripts/perf_record.py`) and may raise
+    to stop. None (the default) leaves the loop exactly as it is."""
     import random as _random
 
     set_seed(config.seed)
@@ -307,8 +419,17 @@ def train(
 
     collator = build_collator(tokenizer, config)
     rng = _random.Random(config.seed)
+    if teacher is not None:
+        from sokudan.train.distill import distill_kl, teacher_batch
 
-    steps_per_epoch = math.ceil(len(train_examples) / config.batch_size)
+        targets, target_options = teacher
+        if len(targets) < len(train_examples):
+            raise ValueError("fewer teacher rows than training examples")
+        row_of = {id(e): i for i, e in enumerate(train_examples)}
+
+    steps_per_epoch = math.ceil(
+        math.ceil(len(train_examples) / config.batch_size) / config.grad_accum
+    )
     total_steps = steps_per_epoch * config.epochs
     optimizer = build_optimizer(model, config)
     apply_lr = cosine_schedule(optimizer, total_steps, int(total_steps * config.warmup_fraction))
@@ -327,10 +448,18 @@ def train(
         )
         started = time.time()
         running: list[float] = []
+        # Performance A3: the per-step losses stay on the device and are read in one
+        # transfer at each log line (and at the end of the epoch) instead of one sync
+        # per step. `float` of each stacked fp32 value is the same number
+        # `float(loss.detach())` gave.
+        pending: list[torch.Tensor] = []
 
-        for batch_index, group in enumerate(batches):
-            batch: Batch = collator(group).to(device)
-            apply_lr(step)
+        accum = config.grad_accum
+        for batch_index, (group, cpu_batch) in enumerate(prefetched(batches, collator)):
+            batch: Batch = cpu_batch.to(device)
+            first = batch_index % accum == 0
+            if first:
+                apply_lr(step)
 
             with torch.autocast(device_type=device.type, dtype=amp,
                                 enabled=amp != torch.float32):
@@ -342,19 +471,46 @@ def train(
                 batch.marker_mask, ordinal_weight=config.ordinal_weight,
             )
             loss = breakdown.total
+            if teacher is not None:
+                t = teacher_batch(targets, target_options, [row_of[id(e)] for e in group],
+                                  batch.marker_mask)
+                loss = (config.distill_alpha * loss + (1.0 - config.distill_alpha)
+                        * distill_kl(out.probs.float(), t, batch.marker_mask))
 
-            optimizer.zero_grad(set_to_none=True)
-            loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
-            optimizer.step()
+            if first:
+                optimizer.zero_grad(set_to_none=True)
+            if accum > 1:
+                # Divide by the micro-batches this group actually holds. The last group
+                # of an epoch can be short; dividing it by `accum` anyway halved that
+                # step's gradient (fixed 2026-09-25, docs/noise_floor.md §5).
+                (loss / accum_group_size(batch_index, len(batches), accum)).backward()
+            else:
+                loss.backward()
+            if (batch_index + 1) % accum == 0 or batch_index + 1 == len(batches):
+                nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
+                optimizer.step()
+                step += 1
 
-            running.append(float(loss.detach()))
-            step += 1
+            pending.append(loss.detach())
+            if step_hook is not None:
+                step_hook(epoch, batch_index, group, loss.detach())
             if (batch_index + 1) % config.log_every == 0:
+                _flush_losses(pending, running)
                 window = running[-config.log_every:]
+                # Elapsed and peak memory are what tell paging apart from a slow
+                # configuration; the flush above syncs with the device, so wall time
+                # here is GPU time, not launch time.
+                memory = ""
+                if device.type == "cuda":
+                    allocated = torch.cuda.max_memory_allocated(device) / 2**30
+                    reserved = torch.cuda.max_memory_reserved(device) / 2**30
+                    memory = (f" peak_alloc {allocated:.2f}GiB"
+                              f" peak_reserved {reserved:.2f}GiB")
                 print(f"  epoch {epoch} step {batch_index + 1}/{len(batches)} "
-                      f"loss {sum(window) / len(window):.4f}", flush=True)
+                      f"loss {sum(window) / len(window):.4f} "
+                      f"elapsed {time.time() - started:.1f}s{memory}", flush=True)
 
+        _flush_losses(pending, running)
         elapsed = time.time() - started
         val = evaluate(model, val_examples, collator, config)
         logs.append(EpochLog(

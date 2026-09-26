@@ -211,10 +211,15 @@ class JointBatch:
     marker_mask: Tensor
     labels: Tensor
     ordered: Tensor
+    input_order: str = "question_first"
+    """Which block order the tensors are in; `run_model` checks it against the model."""
+    marker_positions_back: Tensor | None = None
+    """`sandwich` only: `(N, M)` positions of the same slots in the second block."""
 
     def to(self, device: torch.device | str) -> JointBatch:
         return JointBatch(**{
-            name: value.to(device) for name, value in self.__dict__.items()
+            name: value.to(device) if isinstance(value, Tensor) else value
+            for name, value in self.__dict__.items()
         })
 
     def __len__(self) -> int:
@@ -228,6 +233,14 @@ class JointCollator:
     encoding does not depend on the state; here it does, so every pair is unique and
     a cache would only waste memory. That difference is the point of the comparison
     and not an oversight.
+
+    **Example cache** (`cache=True`, the default; performance A2, docs/perf_a.md). What
+    is cached is each *example's* token ids, not a question's: `encode_joint` is a pure
+    function of the example and this collator's settings, and training and evaluation
+    present the same `Example` objects again every epoch and every evaluation. The
+    cache is keyed by object identity and checks the object is the same one, so a new
+    example with a recycled `id` is encoded afresh. `truncated` counts every encoding
+    served, cached or not, so it reads as it did without the cache.
     """
 
     def __init__(
@@ -235,20 +248,31 @@ class JointCollator:
         tokenizer: PreTrainedTokenizerBase,
         *,
         max_joint_tokens: int = MAX_JOINT_TOKENS,
+        input_order: str = "question_first",
+        cache: bool = True,
     ) -> None:
         self.tokenizer = tokenizer
         self.max_joint_tokens = max_joint_tokens
+        self.input_order = input_order
         self.pad_id = tokenizer.pad_token_id
         if self.pad_id is None:
             raise ValueError("tokenizer has no pad token; padding would be ambiguous")
         self.truncated = 0
+        self._cache: dict[int, tuple[Example, Any]] | None = {} if cache else None
+
+    def _encode(self, example: Example) -> Any:
+        if self._cache is not None:
+            hit = self._cache.get(id(example))
+            if hit is not None and hit[0] is example:
+                return hit[1]
+        item = encode_joint(example.question, example.state, self.tokenizer,
+                            max_tokens=self.max_joint_tokens, input_order=self.input_order)
+        if self._cache is not None:
+            self._cache[id(example)] = (example, item)
+        return item
 
     def __call__(self, examples: list[Example]) -> JointBatch:
-        encoded = [
-            encode_joint(e.question, e.state, self.tokenizer,
-                         max_tokens=self.max_joint_tokens)
-            for e in examples
-        ]
+        encoded = [self._encode(e) for e in examples]
         self.truncated += sum(1 for e in encoded if e.truncated)
 
         length = max(len(e.input_ids) for e in encoded)
@@ -261,6 +285,8 @@ class JointCollator:
         marker_mask = torch.zeros((batch_size, n_markers), dtype=torch.long)
         labels = torch.zeros(batch_size, dtype=torch.long)
         ordered = torch.zeros(batch_size, dtype=torch.bool)
+        back = (torch.zeros((batch_size, n_markers), dtype=torch.long)
+                if self.input_order == "sandwich" else None)
 
         for row, (example, item) in enumerate(zip(examples, encoded, strict=True)):
             input_ids[row, : len(item.input_ids)] = torch.tensor(item.input_ids)
@@ -270,6 +296,10 @@ class JointCollator:
             marker_positions[row, : len(positions)] = torch.tensor(positions)
             marker_mask[row, : len(positions)] = 1
             marker_positions[row, len(positions):] = positions[0]
+            if back is not None:
+                back_positions = item.marker_positions_back
+                back[row, : len(back_positions)] = torch.tensor(back_positions)
+                back[row, len(back_positions):] = back_positions[0]
 
             if not 0 <= example.label < len(positions):
                 raise ValueError(
@@ -286,4 +316,6 @@ class JointCollator:
             marker_mask=marker_mask,
             labels=labels,
             ordered=ordered,
+            input_order=self.input_order,
+            marker_positions_back=back,
         )

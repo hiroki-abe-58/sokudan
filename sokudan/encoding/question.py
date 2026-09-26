@@ -201,6 +201,12 @@ class QuestionEncoderCache:
 
 MAX_JOINT_TOKENS = 1024
 
+INPUT_ORDERS = ("question_first", "state_first", "sandwich")
+"""Block order inside a joint sequence. `question_first` is v0.1's arrangement;
+`state_first` puts the same blocks the other way round (docs/input_order.md);
+`sandwich` puts one identical question block on each side of the state, and the model
+averages each marker's two hidden states (docs/sandwich.md)."""
+
 
 @dataclass(frozen=True)
 class EncodedJoint:
@@ -218,10 +224,12 @@ class EncodedJoint:
     unrelated reason, so the mechanism is worth measuring rather than assuming. This
     is that measurement, not a change of position.
 
-    The question comes first so the markers sit at low indices, within a local window
-    of the start of the state. The state is truncated from the end if the pair does
-    not fit; **markers are never truncated**, which is the same rule the separate
-    encoder enforces.
+    By default the question comes first so the markers sit at low indices, within a
+    local window of the start of the state. `input_order="state_first"` swaps the two
+    blocks and changes nothing else -- same tokens, same separators, same truncation --
+    so the markers sit next to the *end* of the state instead. The state is truncated
+    from the end if the pair does not fit, in either order; **markers are never
+    truncated**, which is the same rule the separate encoder enforces.
     """
 
     input_ids: list[int]
@@ -232,6 +240,8 @@ class EncodedJoint:
     truncated: bool
     n_question_tokens: int
     n_state_tokens: int
+    marker_positions_back: list[int] | None = None
+    """`sandwich` only: the same slots in the second question block, in the same order."""
 
     def __post_init__(self) -> None:
         if len(self.input_ids) != len(self.attention_mask):
@@ -244,6 +254,12 @@ class EncodedJoint:
         for position in self.marker_positions:
             if not 0 <= position < len(self.input_ids):
                 raise ValueError(f"marker position {position} is outside the sequence")
+        if self.marker_positions_back is not None:
+            if len(self.marker_positions_back) != self.n_markers:
+                raise ValueError("front and back marker positions must pair one to one")
+            for position in self.marker_positions_back:
+                if not 0 <= position < len(self.input_ids):
+                    raise ValueError(f"marker position {position} is outside the sequence")
 
 
 def encode_joint(
@@ -252,14 +268,23 @@ def encode_joint(
     tokenizer: PreTrainedTokenizerBase,
     *,
     max_tokens: int = MAX_JOINT_TOKENS,
+    input_order: str = "question_first",
 ) -> EncodedJoint:
-    """`[CLS] {instructions} [SEP] {options+markers} [SEP] {state} [SEP]`.
+    """`[CLS] {instructions} [SEP] {options+markers} [SEP] {state} [SEP]`, or with
+    `input_order="state_first"`, `[CLS] {state} [SEP] {instructions} [SEP]
+    {options+markers} [SEP]`.
 
     Built from the same `marker_texts` and the same `SpecialTokenLayout` as
     `encode_question`, so the two modes cannot disagree about what a marker is or
     where the separators go. That is the §1-3 rule: one place a question becomes
-    token ids, even when there are two arrangements of it.
+    token ids, even when there are two arrangements of it -- and the block order is
+    decided here and nowhere else, so training and evaluation cannot build it apart.
+
+    Marker positions are recorded while the sequence is assembled, never assumed at
+    a fixed offset, and checked to land on the mask token before returning.
     """
+    if input_order not in INPUT_ORDERS:
+        raise ValueError(f"input_order must be one of {INPUT_ORDERS}, got {input_order!r}")
     mask_id = require_mask_token_id(tokenizer)
     layout = SpecialTokenLayout.from_tokenizer(tokenizer)
 
@@ -270,24 +295,51 @@ def encode_joint(
     def ids_of(text: str) -> list[int]:
         return list(tokenizer(text, add_special_tokens=False)["input_ids"])
 
-    head: list[int] = [*layout.prefix, *ids_of(question.instructions), *layout.separator]
-    marker_positions: list[int] = []
+    # The question block, without the special tokens around it; marker offsets are
+    # relative to its first token.
+    question_block: list[int] = [*ids_of(question.instructions), *layout.separator]
+    offsets: list[int] = []
     for text in texts:
-        head.extend(ids_of(text))
-        marker_positions.append(len(head))
-        head.append(mask_id)
-    head.extend(layout.separator)
+        question_block.extend(ids_of(text))
+        offsets.append(len(question_block))
+        question_block.append(mask_id)
 
-    room = max_tokens - len(head) - len(layout.suffix)
+    # Everything that is not state: the same count in both single-block orders;
+    # `sandwich` carries the block (and its separator) twice.
+    n_blocks = 2 if input_order == "sandwich" else 1
+    n_question_tokens = len(layout.prefix) + n_blocks * (len(question_block)
+                                                         + len(layout.separator))
+    room = max_tokens - n_question_tokens - len(layout.suffix)
     if room < 1:
         raise QuestionTooLongError(
-            f"the question alone encodes to {len(head)} tokens, leaving no room for a "
-            f"state inside the {max_tokens} limit. Markers are never truncated away."
+            f"the question alone encodes to {n_question_tokens} tokens, leaving no room "
+            f"for a state inside the {max_tokens} limit. Markers are never truncated away."
         )
 
     state_ids = ids_of(state)
     truncated = len(state_ids) > room
-    input_ids = [*head, *state_ids[:room], *layout.suffix]
+    kept_state = state_ids[:room]
+
+    back_positions: list[int] | None = None
+    if input_order == "question_first":
+        input_ids = [*layout.prefix, *question_block, *layout.separator, *kept_state,
+                     *layout.suffix]
+        question_start = len(layout.prefix)
+    elif input_order == "state_first":
+        input_ids = [*layout.prefix, *kept_state, *layout.separator, *question_block,
+                     *layout.suffix]
+        question_start = len(layout.prefix) + len(kept_state) + len(layout.separator)
+    else:  # sandwich: the identical block on both sides of the state
+        input_ids = [*layout.prefix, *question_block, *layout.separator, *kept_state,
+                     *layout.separator, *question_block, *layout.suffix]
+        question_start = len(layout.prefix)
+        back_start = (len(layout.prefix) + len(question_block) + len(layout.separator)
+                      + len(kept_state) + len(layout.separator))
+        back_positions = [back_start + offset for offset in offsets]
+    marker_positions = [question_start + offset for offset in offsets]
+    for position in marker_positions + (back_positions or []):
+        if input_ids[position] != mask_id:
+            raise AssertionError("a marker position does not point at the mask token")
 
     return EncodedJoint(
         input_ids=input_ids,
@@ -296,6 +348,7 @@ def encode_joint(
         n_markers=len(texts),
         ordered=is_ordered(question),
         truncated=truncated,
-        n_question_tokens=len(head),
+        n_question_tokens=n_question_tokens,
         n_state_tokens=min(len(state_ids), room),
+        marker_positions_back=back_positions,
     )

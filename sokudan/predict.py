@@ -106,7 +106,9 @@ class Agent:
             # (`docs/architecture.md` §1.2).
             encoded = [
                 encode_joint(prepared[qid].question, text, self.tokenizer,
-                             max_tokens=self.max_state_tokens)
+                             max_tokens=self.max_state_tokens,
+                             input_order=getattr(self.model, "input_order",
+                                                 "question_first"))
                 for qid in order
             ]
             state_tokens = max((e.n_state_tokens for e in encoded), default=0)
@@ -128,6 +130,8 @@ class Agent:
         marker_positions = torch.zeros((n, n_markers), dtype=torch.long)
         marker_mask = torch.zeros((n, n_markers), dtype=torch.long)
         ordered = torch.zeros(n, dtype=torch.bool)
+        sandwich = getattr(self.model, "input_order", "question_first") == "sandwich"
+        back = torch.zeros((n, n_markers), dtype=torch.long) if sandwich else None
 
         for row, qid in enumerate(order):
             item = encoded[row]
@@ -136,13 +140,18 @@ class Agent:
             positions = item.marker_positions
             marker_positions[row, : len(positions)] = torch.tensor(positions)
             marker_positions[row, len(positions):] = positions[0]
+            if back is not None:
+                back[row, : len(positions)] = torch.tensor(item.marker_positions_back)
+                back[row, len(positions):] = item.marker_positions_back[0]
             marker_mask[row, : len(positions)] = 1
             ordered[row] = is_ordered(prepared[qid].question)
 
         if self.encoding == "joint":
+            extra = {} if back is None else {"marker_positions_back": back.to(device)}
             out = self.model(
                 input_ids.to(device), attention_mask.to(device),
                 marker_positions.to(device), marker_mask.to(device), ordered.to(device),
+                **extra,
             )
             question_tokens = int(attention_mask.sum()) - state_tokens * n
         else:
@@ -292,13 +301,21 @@ def load(
     backbone_id = config.get("backbone", BACKBONE_MODEL_ID)
     encoding = config.get("encoding", "separate")
 
+    # Absent in checkpoints that predate `--local-attention`; None keeps the
+    # pretrained window, which is what those were trained at.
+    local_attention = config.get("local_attention")
+
     if encoding == "joint":
         from sokudan.model.joint import SokudanJointModel
 
-        model = SokudanJointModel.from_pretrained_backbone(backbone_id)
+        model = SokudanJointModel.from_pretrained_backbone(
+            backbone_id, local_attention=local_attention,
+            input_order=config.get("input_order", "question_first"),
+        )
     else:
         model = SokudanModel.from_pretrained_backbone(
-            backbone_id, n_head_layers=config.get("n_head_layers", 2)
+            backbone_id, n_head_layers=config.get("n_head_layers", 2),
+            local_attention=local_attention,
         )
     model.load_state_dict(blob["state_dict"])
     model.to(device).eval()
