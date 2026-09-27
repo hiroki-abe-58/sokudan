@@ -4,8 +4,12 @@
         --bench data/bench_en.jsonl --lang en --out runs/position_bias_en.json
     sokudan probe-position --shuffle
         --model laya:convaiinnovations/laya-multilingual --out runs/condition_f.json
+    sokudan serve --model GeneLab/sokudan-ja-310m --port 8000
 
-Only the position-bias probe is exposed so far, because it is the one piece of this
+`serve` runs the `/v1/systemone`-compatible server (`sokudan.serve.systemone`,
+`docs/serving.md`).
+
+The position-bias probe is exposed because it is the one piece of this
 repository that is useful against a model that is not `sokudan`. `docs/baseline_ja.md`
 §6.2 reports `laya-multilingual` putting its argmax on the first presented option in
 0, 0, 1, 1 and 0 of 300 items across five schema variants, and §6.2b repeats it with
@@ -26,6 +30,8 @@ import sys
 USAGE = """sokudan <command> [options]
 
 commands:
+  serve             serve the model on a /v1/systemone-compatible endpoint
+                    (needs the serve extra: pip install "sokudan[serve]")
   probe-position    measure position bias on an ordinal question
                     (--shuffle runs condition F: options shuffled per item)
 """
@@ -37,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="sokudan", usage=USAGE, add_help=False,
         description="Japanese System One decision model.",
     )
-    parser.add_argument("command", nargs="?", choices=["probe-position"])
+    parser.add_argument("command", nargs="?", choices=["probe-position", "serve"])
     parser.add_argument("-h", "--help", action="store_true", dest="help")
     known, rest = parser.parse_known_args(argv)
 
@@ -46,6 +52,11 @@ def main(argv: list[str] | None = None) -> int:
     if known.command is None:
         print(USAGE)
         return 0 if known.help else 2
+
+    if known.command == "serve":
+        from sokudan.serve.systemone import main as serve
+
+        return serve(rest + (["--help"] if known.help else []))
 
     if known.command == "probe-position":
         # `--shuffle` selects condition F, which is a different script rather than a

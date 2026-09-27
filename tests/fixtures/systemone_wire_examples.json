@@ -1,0 +1,207 @@
+{
+  "_about": "Request and response examples copied verbatim from public documentation, retrieved 2026-09-27. Used by tests/test_systemone_server.py to check that sokudan's /v1/systemone accepts the published requests and answers in the published shape. Values in the responses are the publishers' and are never compared; only field names and types are. Where an example was written with SDK objects rather than JSON, 'translated' says so and the translation is field-for-field.",
+  "requests": [
+    {
+      "source": "docs.typesafe.ai/api (Evaluation endpoint, Example request)",
+      "body": {
+        "state": "Help! My payouts have been failing for 3 days.",
+        "model": "jev-latest",
+        "questions": {"is_urgent": {"type": "noul", "instructions": "Does this convey urgency?"}}
+      }
+    },
+    {
+      "source": "docs.typesafe.ai/api (Noul, Example request)",
+      "body": {
+        "state": "Help! My payouts have been failing for 3 days.",
+        "model": "jev-latest",
+        "questions": {
+          "is_urgent": {
+            "type": "noul",
+            "instructions": "Does this convey urgency?",
+            "criteria": {"true": "Explicitly time-sensitive", "false": "No urgency expressed"}
+          }
+        }
+      }
+    },
+    {
+      "source": "docs.typesafe.ai/api (Choice, Example request)",
+      "body": {
+        "state": "Help! My payouts have been failing for 3 days.",
+        "model": "jev-latest",
+        "questions": {
+          "department": {
+            "type": "choice",
+            "instructions": "Which team should handle this?",
+            "criteria": {
+              "billing": "Payments, invoicing, refunds",
+              "technical": "Bugs, outages, integrations",
+              "sales": "Pricing, upgrades, new accounts"
+            }
+          }
+        }
+      }
+    },
+    {
+      "source": "docs.typesafe.ai/api (Score, Example request)",
+      "body": {
+        "state": "Help! My payouts have been failing for 3 days.",
+        "model": "jev-latest",
+        "questions": {
+          "frustration": {
+            "type": "score",
+            "instructions": "How frustrated is the customer?",
+            "criteria": ["Calm", "Frustrated", "Very angry"]
+          }
+        }
+      }
+    },
+    {
+      "source": "docs.typesafe.ai/api (Question types, structured instructions)",
+      "body": {
+        "state": "Resume: John Smith, Oakland CA, previously at Google.",
+        "model": "jev-latest",
+        "questions": {
+          "same_person": {
+            "type": "noul",
+            "instructions": {
+              "potential_duplicate": {
+                "name": "John Smith",
+                "location": "Oakland, California",
+                "last_employer": "Google"
+              },
+              "question": "Is the resume for the same person as `potential_duplicate`?"
+            }
+          }
+        }
+      },
+      "note": "The instructions object is verbatim from the reference; the state is ours, since the reference shows only the instructions fragment."
+    },
+    {
+      "source": "github.com/jaredpalmer/kev README (Quickstart, curl)",
+      "body": {
+        "state": "Shoes arrived two weeks late and in the wrong size. Also I see two charges on my card.",
+        "model": "kev-latest",
+        "questions": {
+          "department": {"type": "choice", "instructions": "Which team should handle this?",
+                         "criteria": {"returns": "Exchanges, refunds, wrong or damaged items",
+                                      "shipping": "Delivery status, delays, lost packages",
+                                      "billing": "Charges, invoices, payment problems"}},
+          "escalate": {"type": "noul", "instructions": "Does this need urgent human attention?"},
+          "frustration": {"type": "score", "instructions": "How frustrated is the customer?",
+                          "criteria": ["Calm", "Frustrated", "Very angry"]}
+        }
+      }
+    },
+    {
+      "source": "github.com/jaredpalmer/kev README (Use It From Python)",
+      "translated": "Noul/Choice/Score SDK objects written as their JSON fields; model from the client's model=",
+      "body": {
+        "state": "I was charged twice. Please fix this ASAP.",
+        "model": "kev-latest",
+        "questions": {
+          "billing": {"type": "noul", "instructions": "Is this ticket about billing?"},
+          "tone": {"type": "choice", "instructions": "What is the customer's tone?",
+                   "criteria": {"calm": null, "frustrated": null, "angry": null}},
+          "urgency": {"type": "score", "instructions": "How urgent is this ticket?",
+                      "criteria": ["can wait", "this week", "today"]}
+        }
+      }
+    },
+    {
+      "source": "github.com/InterfazeAI/lev README (Quickstart, in-process)",
+      "translated": "the state and questions arguments of model.system_one(); no model field, as in the call",
+      "body": {
+        "state": "Hi, I was charged twice for my order #4471 and I want a refund.",
+        "questions": {
+          "intent": {
+            "type": "choice",
+            "instructions": "What does the customer want?",
+            "criteria": {"refund": "wants money back", "cancel": null, "track": null, "other": null}
+          },
+          "urgent": {"type": "noul", "instructions": "Does this need a human within the hour?"}
+        }
+      }
+    },
+    {
+      "source": "github.com/InterfazeAI/lev README (Quickstart, as a server with a TypeSafe client)",
+      "translated": "Choice/Noul SDK objects written as their JSON fields; no model field, as in the call",
+      "body": {
+        "state": {"ticket": "The app crashes every time I open settings."},
+        "questions": {
+          "team": {"type": "choice", "instructions": "Which team owns this?",
+                   "criteria": {"billing": null, "technical": null}},
+          "bug": {"type": "noul", "instructions": "Is this a bug report?"}
+        }
+      }
+    },
+    {
+      "source": "github.com/NandhaKishorM/laya README (Self-Hosting: HTTP Server, curl)",
+      "body": {
+        "state": {"body": "billed twice, refund please or we cancel"},
+        "questions": {"dept": {"type": "choice", "instructions": "which team?",
+                               "criteria": {"billing": "refunds", "tech": "bugs"}}}
+      }
+    },
+    {
+      "source": "github.com/NandhaKishorM/laya README (Quickstart, Router)",
+      "translated": "the state and questions arguments of router.predict()",
+      "body": {
+        "state": "Hi, we were billed twice for March. Please refund the duplicate today or we will cancel our plan.",
+        "questions": {
+          "department": {"type": "choice", "instructions": "Which department should handle this?",
+                         "criteria": {"billing": "invoices, payments, refunds",
+                                      "technical": "bugs, outages, system errors",
+                                      "other": "everything else"}},
+          "urgency": {"type": "score", "instructions": "How urgent is this?",
+                      "criteria": ["not urgent", "soon", "blocking"]},
+          "churn_risk": {"type": "noul", "instructions": "Does the user threaten to cancel or leave?"}
+        }
+      }
+    }
+  ],
+  "responses": [
+    {
+      "source": "docs.typesafe.ai/api (Noul answer)",
+      "request_index": 1,
+      "body": {"model": "jev-1.13.0",
+               "answers": {"is_urgent": {"type": "noul", "noul": 0.95}},
+               "usage": {"input_tokens": 307, "output_tokens": 20}}
+    },
+    {
+      "source": "docs.typesafe.ai/api (Choice answer)",
+      "request_index": 2,
+      "body": {"model": "jev-1.13.0",
+               "answers": {"department": {"type": "choice", "choice": "billing",
+                                          "probabilities": {"billing": 0.88, "technical": 0.12, "sales": 0.0},
+                                          "confidence": 0.81}},
+               "usage": {"input_tokens": 318, "output_tokens": 34}}
+    },
+    {
+      "source": "docs.typesafe.ai/api (Score answer)",
+      "request_index": 3,
+      "body": {"model": "jev-1.13.0",
+               "answers": {"frustration": {"type": "score", "score": 1.05,
+                                           "legend": {"0": "Calm", "1": "Frustrated", "2": "Very angry"},
+                                           "probabilities": {"0": 0.0, "1": 0.95, "2": 0.05},
+                                           "confidence": 0.92}},
+               "usage": {"input_tokens": 304, "output_tokens": 18}}
+    },
+    {
+      "source": "github.com/jaredpalmer/kev README (Example response from Kev-4B)",
+      "request_index": 5,
+      "body": {
+        "model": "kev-latest",
+        "answers": {
+          "department": {"type": "choice", "choice": "returns", "confidence": 0.21,
+                         "probabilities": {"returns": 0.47, "shipping": 0.28, "billing": 0.25}},
+          "escalate": {"type": "noul", "noul": 0.93},
+          "frustration": {"type": "score", "score": 1.44, "confidence": 0.34,
+                          "legend": {"0": "Calm", "1": "Frustrated", "2": "Very angry"},
+                          "probabilities": {"0": 0.00, "1": 0.56, "2": 0.44}}
+        },
+        "usage": {"input_tokens": 101, "output_tokens": 161},
+        "latency_ms": 495
+      }
+    }
+  ]
+}
