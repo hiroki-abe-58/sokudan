@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
 
-from sokudan.backends import Backend, Batch
+from sokudan.backends import Backend, Batch, checkpoint_config
 from sokudan.config import BACKBONE_MODEL_ID
 
 
@@ -31,11 +30,8 @@ def read_checkpoint(path: Path) -> dict:
         return torch.load(str(path), map_location="cpu", weights_only=False)
     from safetensors.torch import load_file
 
-    config_path = path / "config.json"
-    config = (
-        json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
-    )
-    return {"state_dict": load_file(str(path / "model.safetensors")), "config": config}
+    return {"state_dict": load_file(str(path / "model.safetensors")),
+            "config": checkpoint_config(path)}
 
 
 class TorchBackend(Backend):
@@ -52,10 +48,13 @@ class TorchBackend(Backend):
         self.input_order = getattr(model, "input_order", "question_first")
 
     @classmethod
-    def load(cls, path: Path, *, device: str = "auto") -> TorchBackend:
+    def load(cls, path: Path, *, device: str = "auto",
+             dtype: str | None = None) -> TorchBackend:
         """Build the model a checkpoint describes and load its weights onto `device`."""
         from sokudan.model.sokudan import SokudanModel
 
+        if dtype not in (None, cls.dtype):
+            raise ValueError(f"the torch backend runs {cls.dtype} only, not {dtype!r}")
         device = resolve_device(device)
         blob = read_checkpoint(path)
         config = blob.get("config", {})

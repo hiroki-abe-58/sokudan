@@ -19,7 +19,7 @@ import torch.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -341,10 +341,91 @@ def resolve_temperatures(
     return read_temperatures(path)
 
 
+BACKENDS = ("auto", "mlx", "torch")
+
+SELF_CHECK_STATE = "先月の請求が二重になっています。"
+SELF_CHECK_QUESTIONS = {
+    "choice": {"type": "choice", "instructions": "担当部署は",
+               "criteria": {"請求": "支払い", "技術": "不具合", "その他": "上記以外"}},
+    "score": {"type": "score", "instructions": "緊急度は", "criteria": ["低", "中", "高"]},
+    "bool": {"type": "bool", "instructions": "返金を求めているか"},
+}
+"""The short request `load` answers once before returning an agent (every head runs)."""
+
+
+def is_apple_silicon() -> bool:
+    import platform
+
+    return platform.system() == "Darwin" and platform.machine() == "arm64"
+
+
+def _mlx_importable() -> bool:
+    try:
+        import mlx.core  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _candidates(backend: str, device: str | None) -> Iterator[tuple[str, str]]:
+    """`(backend, device)` pairs to try, in order. `auto` with `device="auto"`: mlx (if it
+    imports, on Apple silicon), then torch on mps, cuda, cpu. An explicit device is a
+    torch device."""
+    if backend not in BACKENDS:
+        raise ValueError(f"backend must be one of {BACKENDS}, got {backend!r}")
+    explicit_device = device not in (None, "auto")
+    if backend == "mlx":
+        if explicit_device and device != "gpu":
+            raise ValueError(f"the MLX backend runs on the default MLX device, not {device!r}")
+        yield "mlx", "gpu"
+        return
+    if backend == "torch" or explicit_device:
+        yield "torch", device or "auto"
+        return
+    if is_apple_silicon() and _mlx_importable():
+        yield "mlx", "gpu"
+    try:
+        import torch
+    except ImportError:
+        return
+    if torch.backends.mps.is_available():
+        yield "torch", "mps"
+    if torch.cuda.is_available():
+        yield "torch", "cuda"
+    yield "torch", "cpu"
+
+
+def _load_backend(name: str, path: Path, device: str, dtype: str | None) -> Backend:
+    if name == "mlx":
+        from sokudan.backends.mlx import DTYPES, MLXBackend
+
+        if dtype is not None and dtype not in DTYPES:
+            raise ValueError(f"the MLX backend's dtype is one of {DTYPES}, got {dtype!r}")
+        return MLXBackend.load(path, dtype=dtype)
+    from sokudan.backends.torch_backend import TorchBackend
+
+    return TorchBackend.load(path, device=device, dtype=dtype)
+
+
+def self_check(agent: Agent) -> None:
+    """Answer `SELF_CHECK_QUESTIONS` once; raise if that fails or gives a non-finite
+    probability."""
+    import math
+
+    answers = agent.predict(SELF_CHECK_STATE, SELF_CHECK_QUESTIONS)["answers"]
+    values = [answers["bool"]["noul"], answers["score"]["score"],
+              *answers["choice"]["probabilities"].values(),
+              *answers["score"]["probabilities"].values()]
+    if not all(math.isfinite(v) for v in values):
+        raise FloatingPointError(f"self-check gave non-finite probabilities: {answers}")
+
+
 def load(
     checkpoint: str | Path,
     *,
+    backend: str = "auto",
     device: str | None = "auto",
+    dtype: str | None = None,
     temperatures: str | Path | dict[tuple[str, int], float] | None = DEFAULT_CALIBRATION,
 ) -> Agent:
     """Load a checkpoint, from disk or from the Hub.
@@ -354,8 +435,17 @@ def load(
             `model.safetensors` + `config.json`, or a Hub repo id such as
             `GeneLab/sokudan-ja-310m`. A repo id may carry a revision after `@`
             (`GeneLab/sokudan-ja-310m@seed1`).
-        device: `"auto"` (the default) picks cuda, then mps, then cpu; `"cpu"`,
-            `"cuda"`, `"mps"` (or any torch device string) are used as given.
+        backend: `"auto"` (the default) tries MLX (when `mlx` imports on Apple
+            silicon), then torch on mps, cuda and cpu, and uses the first that loads
+            and answers a short self-check request; a failure is a warning and the next
+            one is tried. `"mlx"` or `"torch"` uses that backend and raises on failure.
+            `agent.backend` says which one was chosen.
+        device: `"auto"` (the default). With the torch backend it picks cuda, then
+            mps, then cpu. `"cpu"`, `"cuda"`, `"mps"` (or any torch device string) are
+            torch devices and are used as given, with `backend="auto"` too.
+        dtype: `None` is the backend's default. torch: `"float32"` only. MLX:
+            `sokudan.backends.mlx.DTYPES` (the backbone's precision; the heads run in
+            float32).
         temperatures: by default (v0.2.1) the `calibration.json` shipped beside the
             checkpoint, **bool temperatures only** -- score and choice stay raw
             (docs/calibration.md §10). `None` turns calibration off (the raw head
@@ -363,12 +453,26 @@ def load(
             `calibration.json`, or a dict, applies that file or dict whole. Each
             response says whether a temperature was applied (`calibrated`).
     """
-    from transformers import AutoTokenizer
+    import warnings
 
-    from sokudan.backends.torch_backend import TorchBackend
+    from transformers import AutoTokenizer
 
     path = locate_checkpoint(checkpoint)
     parsed = resolve_temperatures(temperatures, path.parent if path.is_file() else path)
-    backend = TorchBackend.load(path, device=device or "auto")
-    return Agent(backend, AutoTokenizer.from_pretrained(backend.backbone_id),
-                 temperatures=parsed, encoding=backend.encoding)
+    fallback = backend == "auto" and device in (None, "auto")
+    failures: list[str] = []
+    for name, where in _candidates(backend, device):
+        try:
+            runner = _load_backend(name, path, where, dtype)
+            agent = Agent(runner, AutoTokenizer.from_pretrained(runner.backbone_id),
+                          temperatures=parsed, encoding=runner.encoding)
+            self_check(agent)
+            return agent
+        except Exception as exc:
+            if not fallback:
+                raise
+            failures.append(f"{name} ({where}): {type(exc).__name__}: {exc}")
+            warnings.warn(f"sokudan.load: {failures[-1]}; trying the next backend",
+                          RuntimeWarning, stacklevel=2)
+    raise RuntimeError("no backend could load the checkpoint: "
+                       + ("; ".join(failures) or "none available"))

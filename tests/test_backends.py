@@ -7,8 +7,10 @@ import sys
 from dataclasses import dataclass
 
 import numpy as np
+import pytest
+import torch
 
-from sokudan.backends import Batch
+from sokudan.backends import Backend, Batch
 
 
 @dataclass
@@ -39,6 +41,101 @@ def test_sandwich_back_positions_pad_the_same_way():
                          _Encoded([1, 5, 5, 2, 5, 5, 2], [1, 2], [4, 5])],
                         [False, False], pad_id=3, sandwich=True)
     assert batch.marker_positions_back.tolist() == [[3, 3], [4, 5]]
+
+
+class _FakeBackend(Backend):
+    """Uniform probabilities, or NaN when `broken`."""
+
+    encoding = "joint"
+    input_order = "question_first"
+    backbone_id = "sbintuitions/modernbert-ja-310m"
+    dtype = "float32"
+
+    def __init__(self, name: str, device: str, *, broken: bool = False) -> None:
+        self.name, self.device, self.broken, self.model = name, device, broken, None
+
+    def probs(self, batch: Batch) -> np.ndarray:
+        mask = batch.marker_mask.astype(np.float32)
+        out = mask / mask.sum(axis=1, keepdims=True)
+        return out * np.nan if self.broken else out
+
+
+@pytest.fixture
+def checkpoint(tmp_path):
+    (tmp_path / "model.safetensors").write_bytes(b"")
+    return tmp_path
+
+
+@pytest.fixture
+def fake_loads(monkeypatch, tokenizer):
+    """`_load_backend` builds fakes; `failing` names the backends that raise or break."""
+    import sokudan.predict as predict
+
+    calls: list[tuple[str, str]] = []
+    failing: dict[str, str] = {}
+
+    def load_backend(name, path, device, dtype):
+        calls.append((name, device))
+        if failing.get(name) == "raise":
+            raise RuntimeError(f"{name} is broken")
+        return _FakeBackend(name, device, broken=failing.get(name) == "nan")
+
+    monkeypatch.setattr(predict, "_load_backend", load_backend)
+    monkeypatch.setattr(predict, "is_apple_silicon", lambda: True)
+    monkeypatch.setattr(predict, "_mlx_importable", lambda: True)
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    return calls, failing
+
+
+def test_auto_takes_mlx_first_on_apple_silicon(fake_loads, checkpoint):
+    import sokudan
+
+    calls, _ = fake_loads
+    agent = sokudan.load(checkpoint)
+    assert agent.backend.name == "mlx" and calls == [("mlx", "gpu")]
+
+
+@pytest.mark.parametrize("how", ["raise", "nan"])
+def test_auto_warns_and_falls_through_when_a_backend_fails(fake_loads, checkpoint, how):
+    import sokudan
+
+    calls, failing = fake_loads
+    failing["mlx"] = how
+    with pytest.warns(RuntimeWarning, match="mlx"):
+        agent = sokudan.load(checkpoint)
+    assert (agent.backend.name, agent.device) == ("torch", "mps")
+    assert calls == [("mlx", "gpu"), ("torch", "mps")]
+
+
+def test_auto_order_without_mlx_is_mps_then_cpu(fake_loads, checkpoint, monkeypatch):
+    import sokudan
+    import sokudan.predict as predict
+
+    calls, failing = fake_loads
+    monkeypatch.setattr(predict, "_mlx_importable", lambda: False)
+    failing["torch"] = "raise"
+    with pytest.warns(RuntimeWarning), pytest.raises(RuntimeError, match="no backend"):
+        sokudan.load(checkpoint)
+    assert calls == [("torch", "mps"), ("torch", "cpu")]
+
+
+def test_an_explicit_backend_raises_instead_of_falling_back(fake_loads, checkpoint):
+    import sokudan
+
+    _, failing = fake_loads
+    failing["mlx"] = "raise"
+    with pytest.raises(RuntimeError, match="mlx is broken"):
+        sokudan.load(checkpoint, backend="mlx")
+
+
+def test_an_explicit_device_means_torch_on_that_device(fake_loads, checkpoint):
+    import sokudan
+
+    calls, _ = fake_loads
+    agent = sokudan.load(checkpoint, device="cpu")
+    assert (agent.backend.name, agent.device) == ("torch", "cpu")
+    assert calls == [("torch", "cpu")]
 
 
 def test_import_sokudan_does_not_import_torch():

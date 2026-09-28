@@ -9,12 +9,20 @@ torch or MLX; each backend imports its own library when it is loaded.
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+
+def checkpoint_config(directory: Path) -> dict[str, Any]:
+    """The `config.json` beside a safetensors checkpoint (`{}` when there is none)."""
+    path = directory / "config.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
 @dataclass(frozen=True)
