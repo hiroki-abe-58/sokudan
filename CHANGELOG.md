@@ -13,7 +13,7 @@
 - `backend="torch"` / `"mlx"` を指定して、そのライブラリが入っていないときは、`pip install "sokudan[torch]"` / `"sokudan[mlx]"` を案内する ImportError になります。
 - Apple Silicon で torch を使う既存のコード（学習・評価のスクリプト、`backend="torch"`）は `sokudan[torch]` が必要です。
 - **データ生成・学習・評価だけが使う依存（`datasets`、`fugashi`、`unidic-lite`、`matplotlib`）は extra `train` に移しました。** `load` + `predict`（MLX・torch）と `sokudan serve` のどれでも import されないことを、`sys.modules` と `python -X importtime` で確かめています。スクリプトを動かすときは `pip install "sokudan[train]"`（`dev` extra は `train` を含む）。移動の前後で、630 問の合成セットの確率は torch cpu・MLX float16 とも同一（差 0）でした。
-- {{E1_SIZE}}
+- 0.3.0 の wheel をクリーンな Python 3.11 環境（Apple Silicon）に入れると、38 パッケージ（torch なし、mlx 0.32.2）、`site-packages` 393 MB でした（`train` を分ける前は 66 パッケージ、934 MB）。`[torch]` 付きでは 44 パッケージ、1.1 GB です。
 
 ### 既知の事項
 

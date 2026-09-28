@@ -19,11 +19,13 @@ pip install sokudan
   adds torch anywhere; `"sokudan[mlx]"` names MLX explicitly, with the same marker.
 - MLX 0.32.2 is the only version this backend has been run with.
 - A clean install of the 0.3.0 wheel into a new Python 3.11 environment on the machine
-  below: 68 packages, `mlx` and `mlx-metal` 0.32.2, no torch, `site-packages` 934 MB
-  (the largest: unidic_lite 249 MB, mlx 159 MB, pyarrow 127 MB, transformers 114 MB).
-  `sokudan.load()` chose MLX float16 and the Quickstart `predict` ran; torch was not
-  imported. With `[torch]`: 74 packages, 1.6 GB, `load()` still chose MLX and
-  `backend="torch"` chose mps.
+  below: 38 packages, `mlx` and `mlx-metal` 0.32.2, no torch, `site-packages` 393 MB (the
+  largest distributions: mlx-metal 155 MB, transformers 103 MB, numpy 33 MB). `sokudan.load()`
+  chose MLX float16 and the Quickstart `predict` ran; torch was not imported. With
+  `[torch]`: 44 packages, 1.1 GB; `load()` still chose MLX and `backend="torch"` chose mps.
+- `datasets`, `fugashi`, `unidic-lite` and `matplotlib` are in the `train` extra: none of
+  them is imported by load + predict (MLX or torch) or by `sokudan serve`. Before they
+  moved, the same install was 66 packages and 934 MB.
 - `import sokudan` does not import torch. When torch is installed, loading on MLX can
   still import it: transformers (used for the tokenizer and the backbone config) imports
   an installed torch.
