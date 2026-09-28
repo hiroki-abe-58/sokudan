@@ -68,7 +68,8 @@ def checkpoint(tmp_path):
 
 @pytest.fixture
 def fake_loads(monkeypatch, tokenizer):
-    """`_load_backend` builds fakes; `failing` names the backends that raise or break."""
+    """`_load_backend` builds fakes; `failing` names the backends (`"torch"`) or backend
+    and device (`"torch/mps"`) that raise or return NaN."""
     import sokudan.predict as predict
 
     calls: list[tuple[str, str]] = []
@@ -76,9 +77,10 @@ def fake_loads(monkeypatch, tokenizer):
 
     def load_backend(name, path, device, dtype):
         calls.append((name, device))
-        if failing.get(name) == "raise":
+        how = failing.get(f"{name}/{device}", failing.get(name))
+        if how == "raise":
             raise RuntimeError(f"{name} is broken")
-        return _FakeBackend(name, device, broken=failing.get(name) == "nan")
+        return _FakeBackend(name, device, broken=how == "nan")
 
     monkeypatch.setattr(predict, "_load_backend", load_backend)
     monkeypatch.setattr(predict, "is_apple_silicon", lambda: True)
@@ -118,6 +120,33 @@ def test_auto_order_without_mlx_is_mps_then_cpu(fake_loads, checkpoint, monkeypa
     with pytest.warns(RuntimeWarning), pytest.raises(RuntimeError, match="no backend"):
         sokudan.load(checkpoint)
     assert calls == [("torch", "mps"), ("torch", "cpu")]
+
+
+def test_a_failed_mlx_self_check_and_a_failed_mps_end_on_the_cpu(fake_loads, checkpoint):
+    import sokudan
+
+    calls, failing = fake_loads
+    failing["mlx"] = "nan"
+    failing["torch/mps"] = "raise"
+    with pytest.warns(RuntimeWarning) as warned:
+        agent = sokudan.load(checkpoint)
+    assert (agent.backend.name, agent.device) == ("torch", "cpu")
+    assert calls == [("mlx", "gpu"), ("torch", "mps"), ("torch", "cpu")]
+    assert [("mlx" in str(w.message), "mps" in str(w.message)) for w in warned] == [
+        (True, False), (False, True)]
+
+
+def test_without_mps_a_failed_mlx_goes_straight_to_the_cpu(fake_loads, checkpoint,
+                                                           monkeypatch):
+    import sokudan
+
+    calls, failing = fake_loads
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+    failing["mlx"] = "nan"
+    with pytest.warns(RuntimeWarning, match="mlx"):
+        agent = sokudan.load(checkpoint)
+    assert (agent.backend.name, agent.device) == ("torch", "cpu")
+    assert calls == [("mlx", "gpu"), ("torch", "cpu")]
 
 
 def test_an_explicit_backend_raises_instead_of_falling_back(fake_loads, checkpoint):
