@@ -128,7 +128,9 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     text = json.dumps(build(), ensure_ascii=False, indent=1)
-    args.out.write_text(text, encoding="utf-8")
+    # LF on every platform: the printed sha256 is of `text`, and the file must match it
+    # (Path.write_text would write CRLF on Windows).
+    args.out.write_text(text, encoding="utf-8", newline="\n")
     print(f"{args.out} sha256={hashlib.sha256(text.encode()).hexdigest()}")
 
 
