@@ -220,7 +220,9 @@ def main(argv: list[str] | None = None) -> int:
                              f"(default {DEFAULT_MODEL_REF}, i.e. the Hub main: v0.2 "
                              "weights plus the v0.2.1 calibration.json)")
     parser.add_argument("--device", default="auto",
-                        help="auto (the default: cuda, then mps, then cpu), cpu, cuda or mps")
+                        help="auto (the default: MLX on Apple silicon when sokudan[mlx] is "
+                             "installed, else torch on mps, cuda or cpu), or a torch "
+                             "device: cpu, cuda or mps")
     parser.add_argument("--temperatures", default=None,
                         help="default: the bool calibration shipped beside the weights "
                              "(score and choice stay raw); 'none' or 'off' for raw "

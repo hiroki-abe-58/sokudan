@@ -2,6 +2,26 @@
 
 数値はすべて本機で実行したコードの出力です。未測定のものは「測定していない」と書きます。
 
+## 未リリース
+
+**モデルの重みは変えていません。** 数値は M1 Max（64 GB、macOS 15.6.1）での実測です（`docs/mlx.md`）。
+
+### MLX バックエンド（Apple Silicon）
+
+- **`sokudan.load(..., backend="auto" | "mlx" | "torch", dtype=...)`。** 既定の `auto` は MLX（`mlx` が import でき、Apple Silicon のとき）→ torch `mps` → `cuda` → `cpu` の順に試します。各候補は短いリクエストを 1 回答えてから使われ、失敗すると warning を出して次に進みます。選ばれたものは `agent.backend` で見えます。
+- **`pip install "sokudan[mlx]"`**（`mlx==0.32.2`、macOS arm64 のみ。動かした版はこれだけ）。
+- MLX の既定は float16（backbone のみ。ヘッドは float32）。`dtype="float32"` も選べます。8bit / 4bit の量子化は一致のゲートを満たさなかったので、選択肢にしていません。
+- torch の CPU（float32）との一致（320 state / 630 問の合成セット、生の確率）:
+  - float32: argmax 630/630、最大絶対差 9.1e-06
+  - float16: argmax 629/630（外れた 1 問は torch 側で 0.4110 と 0.4103 のほぼ同率）、最大絶対差 8.2e-03
+- `predict` 1 回の中央値（3 ラウンド、1 分値 14〜19 の負荷の下）: Quickstart の state・1 問で torch cpu 85〜89 ms / torch mps 20〜21 ms / MLX float16 10.2〜10.4 ms。state 949 トークン・3 問で 1484〜1528 / 403〜411 / 273〜279 ms（全セルは `docs/mlx.md`）。ピーク RSS は torch 約 2.7 GiB、MLX 約 1.5 GiB。
+- ModernBERT のエンコーダは laya-mlx 0.2.0 の実装を無改変で取り込みました（Apache-2.0、`NOTICE`）。
+
+### その他
+
+- **`device` の既定を `"auto"` に**（`load` と `sokudan serve --device`）。torch では `cuda` → `mps` → `cpu` の順に選びます。明示した `cpu` / `cuda` / `mps` は従来どおりです。M1 Max で `mps` と `cpu` の確率の差は最大 4.5e-06（630 問、argmax は全問一致）。
+- **`import sokudan` は torch を import しなくなりました。** forward は `sokudan/backends/`（`torch_backend.py`、`mlx/`）に分け、`predict.py` はエンコード・バッチ組み立て・温度・答えの組み立てだけを持ちます。torch の出力は分離の前後で同一です（630 問、差 0）。
+
 ## v0.2.1 — 2026-09-28 / パッケージ 0.2.1
 
 **モデルの重みは v0.2 と同じです**（`GeneLab/sokudan-ja-310m` の `model.safetensors` は変えていない）。
