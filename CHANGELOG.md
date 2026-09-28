@@ -2,15 +2,31 @@
 
 数値はすべて本機で実行したコードの出力です。未測定のものは「測定していない」と書きます。
 
-## 未リリース
+## v0.3.0 — （日付未定） / パッケージ 0.3.0
 
-**モデルの重みは変えていません。** 数値は M1 Max（64 GB、macOS 15.6.1）での実測です（`docs/mlx.md`）。
+**モデルの重みは v0.2 と同じです。** 数値は M1 Max（64 GB、macOS 15.6.1）での実測です（`docs/mlx.md`）。
+
+### インストールされるものが変わります
+
+- **Apple Silicon の macOS 14 以降（Darwin 23 以降）では、`pip install sokudan` で MLX（`mlx>=0.32.2,<0.33`）が入り、torch は入りません。** それ以外（Linux、Windows、Intel Mac、macOS 13 の Apple Silicon）では従来どおり torch が入ります。
+- extras: `sokudan[torch]`（どこでも torch を足す）、`sokudan[mlx]`（上と同じ条件で MLX）、`sokudan[serve]`。
+- `backend="torch"` / `"mlx"` を指定して、そのライブラリが入っていないときは、`pip install "sokudan[torch]"` / `"sokudan[mlx]"` を案内する ImportError になります。
+- Apple Silicon で torch を使う既存のコード（学習・評価のスクリプト、`backend="torch"`）は `sokudan[torch]` が必要です。
+- 0.3.0 の wheel をクリーンな Python 3.11 環境に入れると、68 パッケージ（torch なし）、`site-packages` 934 MB でした。
 
 ### MLX バックエンド（Apple Silicon）
 
 - **`sokudan.load(..., backend="auto" | "mlx" | "torch", dtype=...)`。** 既定の `auto` は MLX（`mlx` が import でき、Apple Silicon のとき）→ torch `mps` → `cuda` → `cpu` の順に試します。各候補は短いリクエストを 1 回答えてから使われ、失敗すると warning を出して次に進みます。選ばれたものは `agent.backend` で見えます。
-- **`pip install "sokudan[mlx]"`**（`mlx==0.32.2`、macOS arm64 のみ。動かした版はこれだけ）。
-- MLX の既定は float16（backbone のみ。ヘッドは float32）。`dtype="float32"` も選べます。8bit / 4bit の量子化は一致のゲートを満たさなかったので、選択肢にしていません。
+- MLX の既定は float16（backbone のみ。ヘッドは float32）。`dtype="float32"` も選べます。8bit / 4bit の量子化は一致のゲートを満たさなかったので、選択肢にしていません。動かした MLX は 0.32.2 だけです。
+- **`bench_ja`（構成ごとに 1 回、commit `b1fe755`）:**
+
+  | | choice acc | score RPS | bool acc | bool AUROC |
+  |---|---|---|---|---|
+  | torch cpu float32 | 0.880 | 0.0745 | 0.780 | 0.8439 |
+  | MLX float32 | 0.880 | 0.0745 | 0.780 | 0.8439 |
+  | MLX float16 | 0.880 | 0.0745 | 0.780 | 0.8445 |
+
+  予測（argmax、bool の 0.5 のどちら側か）が torch と食い違った問題は、MLX のどちらでも 0 件です。
 - torch の CPU（float32）との一致（320 state / 630 問の合成セット、生の確率）:
   - float32: argmax 630/630、最大絶対差 9.1e-06
   - float16: argmax 629/630（外れた 1 問は torch 側で 0.4110 と 0.4103 のほぼ同率）、最大絶対差 8.2e-03
@@ -19,6 +35,9 @@
 
 ### その他
 
+- **`sokudan serve --backend auto|mlx|torch --dtype ...`。** 起動ログに、選ばれた backend・device・dtype を出します。
+- **`scripts/run_baseline_ja.py --sokudan-backend / --sokudan-device / --sokudan-dtype`。** sokudan の行は `sokudan.load` 経由になり、`.pt` のほか safetensors のディレクトリや Hub id も読めます。問題ごとの確率を `item_probs.npz` に保存します。
+- `uv.lock` を更新しました（mlx 0.32.2 を追加。以前の lock は sokudan 0.2.0 のままでした）。
 - **`device` の既定を `"auto"` に**（`load` と `sokudan serve --device`）。torch では `cuda` → `mps` → `cpu` の順に選びます。明示した `cpu` / `cuda` / `mps` は従来どおりです。M1 Max で `mps` と `cpu` の確率の差は最大 4.5e-06（630 問、argmax は全問一致）。
 - **`import sokudan` は torch を import しなくなりました。** forward は `sokudan/backends/`（`torch_backend.py`、`mlx/`）に分け、`predict.py` はエンコード・バッチ組み立て・温度・答えの組み立てだけを持ちます。torch の出力は分離の前後で同一です（630 問、差 0）。
 

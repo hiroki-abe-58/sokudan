@@ -25,6 +25,16 @@ pip install sokudan
 
 Development version (the `main` branch): `pip install git+https://github.com/hiroki-abe-58/sokudan.git`.
 
+What `pip install sokudan` brings depends on the platform (v0.3.0):
+
+| platform | array library installed | `sokudan.load()` runs on |
+|---|---|---|
+| Apple silicon, macOS 14 or later | MLX (`mlx>=0.32.2,<0.33`); **no torch** | MLX, float16 |
+| Linux, Windows, Intel Mac, Apple silicon on macOS 13 | torch | torch: cuda, then mps, then cpu |
+
+- `pip install "sokudan[torch]"` adds torch on any platform (for `backend="torch"` on Apple silicon, and for the training and evaluation scripts).
+- `pip install "sokudan[mlx]"` names MLX explicitly (same platforms as above). `pip install "sokudan[serve]"` adds the server.
+
 ```python
 import sokudan
 
@@ -46,6 +56,8 @@ Question types are `choice`, `score` (an ordinal scale) and `noul` (P(yes); `boo
 
 **Pass the state as a string.** A dict is rendered as `key: value` lines, which is not the input the model was trained on, and the output changes.
 
+**Backends (v0.3.0).** `sokudan.load(..., backend="auto" | "mlx" | "torch", dtype=None | "float16" | "float32")`. `auto` tries MLX (Apple silicon with `mlx` installed), then torch on mps, cuda and cpu; each candidate answers one short self-check request, and a failure is a warning followed by the next candidate. An explicit `backend` or `device` does not fall back. `agent.backend` says which one is in use. MLX runs float16 by default (the heads stay float32); on `bench_ja`, MLX float32 and float16 give the same four metrics as torch to three decimals. Details and measurements: [`docs/mlx.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/mlx.md).
+
 **Calibration (v0.2.1).** `load` applies one temperature to `noul`/`bool` answers by default (the `calibration.json` shipped with the weights); `choice` and `score` probabilities are raw. `sokudan.load(..., temperatures=None)` turns it off. Each result says which answers were calibrated (`calibrated`, `calibrated_answers`).
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb) The same steps in a notebook on a free CPU runtime: the three question types, calibration on and off, and `sokudan serve` called with `curl` ([`notebooks/sokudan_quickstart.ipynb`](https://github.com/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb)).
@@ -61,7 +73,7 @@ Question types are `choice`, `score` (an ordinal scale) and `noul` (P(yes); `boo
 | majority class | 0.380 | 0.197 | 0.703 | — |
 | random | 0.253 | 0.201 | 0.513 | — |
 
-- `bench_ja` ships in this repo (`data/bench_ja.jsonl`, CC BY 4.0). Please use it for evaluation, not training.
+- `bench_ja` and `bench_en` ship in this repo (`data/bench_ja.jsonl`, `data/bench_en.jsonl`) under CC BY 4.0, separate from the code's Apache-2.0. Please use them for evaluation, not training (a request, not a licence restriction).
 - v0.2's score accuracy is 0.817. Every metric, v0.1's three-seed figures and `bench_en` are in the [model card](https://huggingface.co/GeneLab/sokudan-ja-310m) and [`docs/benchmarks.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/benchmarks.md).
 
 ## How v0.2 was made

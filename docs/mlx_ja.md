@@ -7,11 +7,13 @@ English: [`mlx.md`](mlx.md)。数値はすべて下記の 1 台での実測で�
 ## インストール
 
 ```bash
-pip install "sokudan[mlx]"
+pip install sokudan
 ```
 
-- `mlx` extra は、macOS arm64 のときだけ `mlx==0.32.2` を入れます。このバックエンドを動かした MLX は 0.32.2 だけです。
-- torch は `sokudan` パッケージの依存のままなので、一緒に入ります。MLX バックエンドは torch を使いません。`import sokudan` は torch を import せず、MLX の経路（load、predict、`tests/test_mlx_backend.py`）は torch の入っていない環境で実行しました。
+- v0.3.0 から、Apple Silicon の macOS 14 以降（Darwin 23 以降）では、基本のインストールで `mlx>=0.32.2,<0.33` が入り、**torch は入りません**。それ以外では torch が入り、MLX は入りません（マーカーは `tests/test_packaging.py` で固定）。`pip install "sokudan[torch]"` はどこでも torch を足します。`"sokudan[mlx]"` は同じマーカーで MLX を明示する extra です。
+- このバックエンドを動かした MLX は 0.32.2 だけです。
+- 下記の機械で、0.3.0 の wheel を新しい Python 3.11 環境に入れた結果: 68 パッケージ、`mlx` と `mlx-metal` 0.32.2、torch なし、`site-packages` 934 MB（大きいもの: unidic_lite 249 MB、mlx 159 MB、pyarrow 127 MB、transformers 114 MB）。`sokudan.load()` は MLX float16 を選び、Quickstart の `predict` が通り、torch は import されませんでした。`[torch]` 付きでは 74 パッケージ、1.6 GB で、`load()` は MLX を、`backend="torch"` は mps を選びました。
+- `import sokudan` は torch を import しません。torch が入っている環境では、MLX でロードしても torch が import されることがあります（tokenizer と backbone の config に使う transformers が、入っている torch を import するため）。
 
 ## 使い方
 
@@ -47,7 +49,7 @@ agent = sokudan.load("GeneLab/sokudan-ja-310m", backend="torch")   # PyTorch の
 
 ### `sokudan serve`
 
-`sokudan serve` は既定の引数でロードするので、Apple Silicon で `sokudan[mlx]` が入っていれば MLX（float16）で動きます。`/health` の `device` は `"gpu"` です。`--device cpu` / `mps` / `cuda` を付けると、そのデバイスの torch で動きます。
+`sokudan serve --backend auto|mlx|torch --dtype ...` は、両方を `sokudan.load` に渡します。既定は `auto` なので、Apple Silicon で MLX が入っていれば MLX（float16）で動き、`/health` の `device` は `"gpu"` です。`--device cpu` / `mps` / `cuda` を付けると、そのデバイスの torch で動きます。起動ログに選ばれたものが出ます（例: `sokudan serve: loaded; backend=mlx device=gpu dtype=float16 calibrated=True`）。`sokudan[serve]` をクリーンに入れた環境で、Quickstart のリクエストへの `/v1/systemone` の答えは、確率・choice・score・noul とも `predict()` と同じでした（差 0）。
 
 ## torch との一致
 
@@ -79,6 +81,21 @@ dtype のゲート（型ごと）: argmax 一致率 ≥ 99.5%、平均絶対差 
 - float16 はゲートを満たしたので既定にしました。argmax が食い違った score の 1 問は、torch 側でほぼ同率です（0.4110 と 0.4103。MLX float16 は 0.4105 と 0.4106）。
 - 8bit と 4bit は、float16 の backbone に `nn.quantize` をかけたもの（全 Linear とトークン埋め込み）です。どれもゲートを満たさないので、`dtype` の選択肢にしていません。
 - float16 の backbone には、単発の大きな誤差があります。430 トークンの入力（Quickstart の state の繰り返し、3 問）で、torch との hidden state の最大差は 4.71 です。場所はマーカー以外の位置のチャネル 578 で、torch の値は -19.5 でした。マーカー位置での差は最大 0.035（平均 8.1e-4）で、答えの確率の差は最大 2.2e-4、argmax は変わりません。
+
+### `bench_ja`
+
+`bench_ja`（300 件。部署の choice 4 択、緊急度の score 3 段階、解約示唆の bool）を、2026-09-28 に commit `b1fe755` で、構成ごとに 1 回だけ実行しました。手順は既存のもの（`scripts/run_baseline_ja.py --skip-laya --skip-llm --sokudan-checkpoint <snapshot 5f91a0d> --sokudan-backend ... --sokudan-device ... --sokudan-dtype ...`）で、学習用 collator の 1 質問 16 件ずつのバッチ、較正なし、ほかの行と同じ指標モジュールです。torch 2.14.0 の CPU、mlx 0.32.2。
+
+| 構成 | choice acc | score RPS | bool acc | bool AUROC |
+|---|---|---|---|---|
+| 公開値 v0.2（torch、2026-09-27） | 0.880 | 0.075 | 0.780 | 0.844 |
+| torch cpu float32 | 0.880000 | 0.074509 | 0.780000 | 0.843868 |
+| MLX float32 | 0.880000 | 0.074510 | 0.780000 | 0.843868 |
+| MLX float16 | 0.880000 | 0.074512 | 0.780000 | 0.844454 |
+| MLX float16 − torch | 0 | +0.000002 | 0 | +0.000586 |
+
+- choice・score の argmax と、bool の 0.5 のどちら側かが torch と食い違った問題は、MLX のどちらの構成でも 0 件でした。torch との確率の最大差は、MLX float32 で 5.0e-06（choice）、1.9e-06（score）、1.1e-05（bool の P(true)）、MLX float16 で 6.7e-03、1.9e-03、4.9e-03 です。
+- 実行前に固定した規則: acc か AUROC が torch より 0.01 を超えて低い、または RPS が 0.005 を超えて高い場合だけ、既定を float32 に変える。どちらも起きなかったので、既定は float16 のままです。
 
 ## 速度とメモリ
 

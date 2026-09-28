@@ -10,15 +10,23 @@ same forward pass; `predict` returns the same response shape.
 ## Install
 
 ```bash
-pip install "sokudan[mlx]"
+pip install sokudan
 ```
 
-- The `mlx` extra installs `mlx==0.32.2` on macOS arm64 only. 0.32.2 is the only MLX
-  version this backend has been run with.
-- torch is still a dependency of the `sokudan` package, so it is installed too. The MLX
-  backend does not use it: `import sokudan` does not import torch, and the MLX path
-  (load, predict, the tests in `tests/test_mlx_backend.py`) was run in an environment
-  where torch is not installed.
+- From v0.3.0, on Apple silicon with macOS 14 or later (Darwin 23+), the base install
+  brings `mlx>=0.32.2,<0.33` and **not** torch; everywhere else it brings torch and not
+  MLX (the markers are fixed by `tests/test_packaging.py`). `pip install "sokudan[torch]"`
+  adds torch anywhere; `"sokudan[mlx]"` names MLX explicitly, with the same marker.
+- MLX 0.32.2 is the only version this backend has been run with.
+- A clean install of the 0.3.0 wheel into a new Python 3.11 environment on the machine
+  below: 68 packages, `mlx` and `mlx-metal` 0.32.2, no torch, `site-packages` 934 MB
+  (the largest: unidic_lite 249 MB, mlx 159 MB, pyarrow 127 MB, transformers 114 MB).
+  `sokudan.load()` chose MLX float16 and the Quickstart `predict` ran; torch was not
+  imported. With `[torch]`: 74 packages, 1.6 GB, `load()` still chose MLX and
+  `backend="torch"` chose mps.
+- `import sokudan` does not import torch. When torch is installed, loading on MLX can
+  still import it: transformers (used for the tokenizer and the backbone config) imports
+  an installed torch.
 
 ## Use
 
@@ -66,9 +74,13 @@ agent = sokudan.load("GeneLab/sokudan-ja-310m", backend="torch")   # the PyTorch
 
 ### `sokudan serve`
 
-`sokudan serve` loads with the defaults, so on Apple silicon with `sokudan[mlx]` installed
-it serves the MLX backend (float16); `/health` reports `"device": "gpu"`.
-`--device cpu` / `mps` / `cuda` serves torch on that device.
+`sokudan serve --backend auto|mlx|torch --dtype ...` passes both to `sokudan.load`
+(default `auto`, so on Apple silicon with MLX installed it serves MLX float16; `/health`
+reports `"device": "gpu"`). `--device cpu` / `mps` / `cuda` serves torch on that device.
+The startup log names the choice, e.g.
+`sokudan serve: loaded; backend=mlx device=gpu dtype=float16 calibrated=True`. In a clean
+`sokudan[serve]` install, the `/v1/systemone` answer to the Quickstart request had the
+same probabilities, choice, score and noul as `predict()` (difference 0).
 
 ## Agreement with torch
 
@@ -113,6 +125,30 @@ question and max abs <= 1e-3.
   is 4.71, at a non-marker position, in channel 578, where the torch value is -19.5. At
   the marker positions the difference is at most 0.035 (mean 8.1e-4), and the answers'
   probabilities differ by at most 2.2e-4 (argmax unchanged).
+
+### `bench_ja`
+
+`bench_ja` (300 items; 4-way department choice, 3-level urgency score, churn bool), run
+once per configuration on 2026-09-28 at commit `b1fe755` with the existing procedure
+(`scripts/run_baseline_ja.py --skip-laya --skip-llm --sokudan-checkpoint <snapshot 5f91a0d>
+--sokudan-backend ... --sokudan-device ... --sokudan-dtype ...`): the training collator's
+batches of 16 items per question, uncalibrated, the same metrics module as every other
+row. torch 2.14.0 on the CPU, mlx 0.32.2.
+
+| configuration | choice acc | score RPS | bool acc | bool AUROC |
+|---|---|---|---|---|
+| published v0.2 (torch, 2026-09-27) | 0.880 | 0.075 | 0.780 | 0.844 |
+| torch cpu float32 | 0.880000 | 0.074509 | 0.780000 | 0.843868 |
+| MLX float32 | 0.880000 | 0.074510 | 0.780000 | 0.843868 |
+| MLX float16 | 0.880000 | 0.074512 | 0.780000 | 0.844454 |
+| MLX float16 − torch | 0 | +0.000002 | 0 | +0.000586 |
+
+- No item's choice or score argmax, and no bool answer's side of 0.5, differs between
+  torch and either MLX configuration. Largest probability differences from torch: MLX
+  float32 5.0e-06 (choice), 1.9e-06 (score), 1.1e-05 (bool P(true)); MLX float16 6.7e-03,
+  1.9e-03, 4.9e-03.
+- Rule fixed before the run: float16 stays the default unless an accuracy or the AUROC is
+  more than 0.01 below torch, or RPS more than 0.005 above. Neither happened.
 
 ## Speed and memory
 

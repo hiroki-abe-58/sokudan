@@ -109,6 +109,32 @@ pip install sokudan
 - 開発版（`main` ブランチ）: `pip install git+https://github.com/hiroki-abe-58/sokudan.git`。手元で開発するときは、clone して `pip install -e .` です。
 - Colab のノートブック（無料の CPU ランタイム。3 型、較正の on/off、`sokudan serve` を curl で叩くところまで）: [Open in Colab](https://colab.research.google.com/github/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb)（[`notebooks/sokudan_quickstart.ipynb`](notebooks/sokudan_quickstart.ipynb)）
 
+### インストールされるもの（v0.3.0）
+
+`pip install sokudan` で入る配列ライブラリは、プラットフォームで変わります。
+
+| プラットフォーム | 入るもの | `sokudan.load()` の実行先 |
+|---|---|---|
+| Apple Silicon、macOS 14 以降 | MLX（`mlx>=0.32.2,<0.33`）。**torch は入らない** | MLX、float16 |
+| Linux、Windows、Intel Mac、macOS 13 の Apple Silicon | torch | torch（cuda → mps → cpu） |
+
+- `pip install "sokudan[torch]"` は、どのプラットフォームでも torch を足します（Apple Silicon で `backend="torch"` を使うとき、学習・評価のスクリプトを動かすとき）。
+- `pip install "sokudan[mlx]"` は MLX を明示する extra です（入るプラットフォームは上と同じ）。`pip install "sokudan[serve]"` はサーバーを足します。
+
+### バックエンドと dtype（v0.3.0）
+
+```python
+agent = sokudan.load("GeneLab/sokudan-ja-310m")                         # backend="auto"
+agent = sokudan.load("GeneLab/sokudan-ja-310m", backend="mlx", dtype="float32")
+agent = sokudan.load("GeneLab/sokudan-ja-310m", backend="torch", device="cpu")
+print(agent.backend)                                                     # 使われているバックエンド
+```
+
+- `backend="auto"`（既定）は MLX（Apple Silicon で mlx が入っているとき）→ torch の mps → cuda → cpu の順に試します。各候補は短いリクエストを 1 回答えてから使われ、失敗すると warning を出して次に進みます。
+- `backend` や `device` を明示したときはフォールバックしません。入っていないライブラリを指定すると、`pip install "sokudan[torch]"` などを案内する ImportError になります。
+- MLX の既定は float16 です（ヘッドは float32）。`bench_ja` では、MLX の float32 と float16 は、4 指標とも小数第 3 位まで torch と同じでした。
+- 詳細と実測: [`docs/mlx_ja.md`](docs/mlx_ja.md)
+
 ```python
 import sokudan
 
