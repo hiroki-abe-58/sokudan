@@ -5,6 +5,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/hiroki-abe-58/sokudan/blob/main/LICENSE)
 [![Hugging Face: GeneLab/sokudan-ja-310m](https://img.shields.io/badge/%F0%9F%A4%97%20model-GeneLab%2Fsokudan--ja--310m-yellow)](https://huggingface.co/GeneLab/sokudan-ja-310m)
 [![Release: v0.2.1](https://img.shields.io/badge/release-v0.2.1-green)](https://github.com/hiroki-abe-58/sokudan/releases/tag/v0.2.1)
+[![PyPI: sokudan](https://img.shields.io/pypi/v/sokudan)](https://pypi.org/project/sokudan/)
 
 *日本語: [README_ja.md](https://github.com/hiroki-abe-58/sokudan/blob/main/README_ja.md)*
 
@@ -19,8 +20,10 @@
 Python 3.11.
 
 ```bash
-pip install git+https://github.com/hiroki-abe-58/sokudan.git
+pip install sokudan
 ```
+
+Development version (the `main` branch): `pip install git+https://github.com/hiroki-abe-58/sokudan.git`.
 
 ```python
 import sokudan
@@ -44,6 +47,8 @@ Question types are `choice`, `score` (an ordinal scale) and `noul` (P(yes); `boo
 **Pass the state as a string.** A dict is rendered as `key: value` lines, which is not the input the model was trained on, and the output changes.
 
 **Calibration (v0.2.1).** `load` applies one temperature to `noul`/`bool` answers by default (the `calibration.json` shipped with the weights); `choice` and `score` probabilities are raw. `sokudan.load(..., temperatures=None)` turns it off. Each result says which answers were calibrated (`calibrated`, `calibrated_answers`).
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb) The same steps in a notebook on a free CPU runtime: the three question types, calibration on and off, and `sokudan serve` called with `curl` ([`notebooks/sokudan_quickstart.ipynb`](https://github.com/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb)).
 
 ## `bench_ja`: v0.2 against `laya-multilingual`
 
@@ -82,9 +87,11 @@ The full list is in [README_ja.md](https://github.com/hiroki-abe-58/sokudan/blob
 ## `/v1/systemone`-compatible server
 
 ```bash
-pip install "sokudan[serve] @ git+https://github.com/hiroki-abe-58/sokudan.git"
+pip install "sokudan[serve]"
 sokudan serve --port 8000
 ```
+
+Development version: `pip install "sokudan[serve] @ git+https://github.com/hiroki-abe-58/sokudan.git"`.
 
 `POST /v1/systemone` takes the same request and returns the same answer shapes as TypeSafe's public API reference, so a client written for that format can point its base URL at `http://127.0.0.1:8000`. `GET /health` reports the loaded model, calibration, and how a JSON state is rendered.
 Built from public documentation and the examples in open implementations' READMEs; not affiliated with or endorsed by TypeSafe AI, and this repository never calls their service.

@@ -7,9 +7,11 @@
 ## 起動
 
 ```bash
-pip install "sokudan[serve] @ git+https://github.com/hiroki-abe-58/sokudan.git"
+pip install "sokudan[serve]"
 sokudan serve                                   # GeneLab/sokudan-ja-310m（HF の main。重みは v0.2 と同じ）を 127.0.0.1:8000 で
 ```
+
+開発版（`main` ブランチ）は `pip install "sokudan[serve] @ git+https://github.com/hiroki-abe-58/sokudan.git"` です。
 
 | オプション | 既定 | 意味 |
 |---|---|---|

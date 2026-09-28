@@ -29,13 +29,16 @@
   - 較正は `load` と同じ既定です。`--temperatures none`（または `SOKUDAN_TEMPERATURES=none`）で無効になります。`/health` は、読み込んだモデルの温度を返します。各応答の `sokudan.calibrated` / `calibrated_answers` は、その応答で温度を当てた答えを表します。
   - 推論時の順序平均の設定（`--order-marginalize`）は削除しました。順序の実験（推論時の平均、学習時の perm-KL、データ側の並べ替え）は、どれも見送りました（モデルカードの Limits）。
 
-### Hugging Face Space
+### デモ: Colab ノートブック（Space の代わり）
 
-- `spaces/demo/`: v0.2.1 用の Gradio デモ（無料の CPU、state を文字列で渡す、noul だけ較正）。公開先に予定した `GeneLab/sokudan-demo` は、作成が HF に 402 で拒否されたため、まだありません（2026-09-28。Gradio の Space を無料の cpu-basic で置くには PRO が必要、という応答。`docs/release_v0.2.1.md`）。
+- **`notebooks/sokudan_quickstart.ipynb`**（[Open in Colab](https://colab.research.google.com/github/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb)）: PyPI からの install → 3 型の `predict`（README の例）→ bool 較正の on/off での P(true) の違い → ノートブックの中で `sokudan serve` を起動して curl で 1 回叩く、まで。無料の CPU ランタイムで動く構成です。
+  - sokudan 0.2.1 は Python 3.11 だけを宣言しているので、3.11 以外（Colab のランタイム）では `--ignore-requires-python` を付けて入れます。
+- **Hugging Face Space は、無料枠では作成できません（PRO が必要）。Colab で代替しました。** `GeneLab/sokudan-demo` の作成は、HF に 402 で拒否されました（2026-09-28。「Gradio の Space を無料の cpu-basic で置くには PRO が必要」という応答。`docs/release_v0.2.1.md`）。`spaces/demo/` のコードはリポジトリに残しています。
 - 以前の `space/`（v0.1 用）は削除しました。
 
 ### PyPI
 
+- **PyPI: `sokudan` 0.2.1**（https://pypi.org/project/sokudan/）。`pip install sokudan`、サーバーは `pip install "sokudan[serve]"` です。README と `docs/serving.md` の install 行もこれにしました（`git+` の行は開発版として残す）。
 - パッケージ名 `sokudan`、版 0.2.1 として配布できるように `pyproject.toml` を整えました（依存の上限、`huggingface-hub` と `safetensors` の明記、extras `serve` と `demo`、sdist の対象の絞り込み。`docs/release_pypi.md`）。
 
 ### ドキュメント

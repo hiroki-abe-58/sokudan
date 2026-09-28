@@ -103,8 +103,11 @@ v0.2 は、v0.1 と同じ設定で学習した 8 本（seed 0〜7）の重みを
 ## Quickstart
 
 ```bash
-pip install -e .
+pip install sokudan
 ```
+
+- 開発版（`main` ブランチ）: `pip install git+https://github.com/hiroki-abe-58/sokudan.git`。手元で開発するときは、clone して `pip install -e .` です。
+- Colab のノートブック（無料の CPU ランタイム。3 型、較正の on/off、`sokudan serve` を curl で叩くところまで）: [Open in Colab](https://colab.research.google.com/github/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb)（[`notebooks/sokudan_quickstart.ipynb`](notebooks/sokudan_quickstart.ipynb)）
 
 ```python
 import sokudan
@@ -312,9 +315,11 @@ train / eval / serve はすべてここを import します。
 ## `/v1/systemone` 互換サーバー
 
 ```bash
-pip install "sokudan[serve] @ git+https://github.com/hiroki-abe-58/sokudan.git"
+pip install "sokudan[serve]"
 sokudan serve --port 8000
 ```
+
+開発版: `pip install "sokudan[serve] @ git+https://github.com/hiroki-abe-58/sokudan.git"`
 
 `POST /v1/systemone` は、TypeSafe の公開 API リファレンスと同じ形のリクエストを受け、同じ形の答えを返します。
 その形式で書かれたクライアントは、base URL を `http://127.0.0.1:8000` に替えるだけで使えます。

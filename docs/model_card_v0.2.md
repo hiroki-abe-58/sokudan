@@ -43,13 +43,17 @@ agent = sokudan.load("GeneLab/sokudan-ja-310m@v0.1")          # v0.1
 ## 使い方
 
 ```bash
-pip install git+https://github.com/hiroki-abe-58/sokudan.git
+pip install sokudan                 # PyPI: https://pypi.org/project/sokudan/
+pip install "sokudan[serve]"        # /v1/systemone 互換サーバー（sokudan serve）も使うとき
 ```
+
+- 開発版（GitHub の `main`）: `pip install git+https://github.com/hiroki-abe-58/sokudan.git`
+- Colab のノートブック（無料の CPU ランタイム。3 型、較正の on/off、`sokudan serve` を curl で叩くところまで）: [Open in Colab](https://colab.research.google.com/github/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb)
 
 ```python
 import sokudan
 
-agent = sokudan.load("GeneLab/sokudan-ja-310m")   # v0.2
+agent = sokudan.load("GeneLab/sokudan-ja-310m")   # v0.2.1（重みは v0.2 と同じ、bool だけ較正）
 result = agent.predict(
     "先月の請求で同じ金額が二回引き落とされています。至急ご確認ください。",   # state は文字列で渡す
     {

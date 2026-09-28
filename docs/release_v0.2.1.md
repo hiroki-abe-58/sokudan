@@ -105,3 +105,25 @@ uvx twine upload dist\*; Remove-Item Env:TWINE_PASSWORD
 3. **HF の `temperatures.json`（v0.1 の頃のもの）は消していません。** 指示にないためです。`load()` の既定では読まれません。
 4. **Space は 402 のあと、ほかの形（Static Space、別の hardware）を試していません。**
 5. **この記録と、CHANGELOG の Space の行の修正は、タグの後の commit として `main` に入れました。** タグ `v0.2.1` の中身（`eef4a4f`）は変えていません。GitHub Release の本文は、直した CHANGELOG の項に差し替えました。
+
+## 8. 仕上げ: PyPI の install 行と Colab ノートブック（2026-09-28 15:48 –）
+
+- **PyPI の確認**（15:48:35）: `https://pypi.org/pypi/sokudan/json` の版は 0.2.1（公開された版は 0.2.1 だけ）でした。wheel と sdist の SHA-256 は §6 の `dist/` と一致しています（`6357173d…`、`0a7c5291…`）。
+- **install 行**: `README.md`、`README_ja.md`、`docs/serving.md`、モデルカードを `pip install sokudan`（サーバーは `pip install "sokudan[serve]"`）にしました。`git+` の行は「開発版」として残しています。README に PyPI のバッジを足しました。
+- **`notebooks/sokudan_quickstart.ipynb`**: PyPI からの install → 3 型の `predict` → bool 較正の on/off → ノートブックの中で `sokudan serve` を起動して `curl` で 1 回、まで。README の Quickstart の直後に「Open in Colab」のバッジを置きました。
+- **ローカルでの実行**（`python -m nbconvert --execute`、`CUDA_VISIBLE_DEVICES=""`、新しい venv に PyPI から入れる）: Python 3.12.13（16:01:20 – 16:02:46）と 3.11.9（16:02:49 – 16:04:10）の両方で、コードセル 8 つがエラーなしで通りました。torch は PyPI の `2.14.0+cpu`、`device: cpu` です。
+
+| | calibrated | raw |
+|---|---|---|
+| 請求の二重引き落とし（README の例） | 0.0903 | 0.0083 |
+| 他社のほうが安いので今月いっぱいで契約を終わりに | 0.9447 | 0.9972 |
+| 新しいプランの料金表を送って | 0.0982 | 0.0100 |
+
+  - `curl` の応答は department `請求`、urgency 1.0899、churn 0.0903、`calibrated_answers` `["churn"]` でした。
+- **Colab 自体では実行していません。** Colab のランタイムの Python の版も、この環境からは確認していません。
+
+**規則にない判断**:
+
+1. **Python 3.11 以外では `--ignore-requires-python` を付けて入れます。** sokudan 0.2.1 は `requires-python = ">=3.11,<3.12"` を宣言していて、そのままでは新しい Python（Colab）で `pip install sokudan` が通らないためです。3.12 で通ることは、上のローカルの実行で確かめました。宣言を広げるのは次の版の判断として残しています（0.2.1 は上げ直せない）。
+2. ローカルの実行は、パスの短い一時ディレクトリで行いました。作業用のディレクトリでは、torch の同梱ライセンスのパスが Windows の長さの上限を超え、pip が `WinError 206` で失敗したためです（ノートブックの問題ではない）。`jupyter` のランチャー exe はアプリケーション制御に止められたので、`python -m nbconvert` で実行しました。
+3. Colab の中の `curl` の応答はファイル（`resp.json`）に書き、Python で UTF-8 として読みます。Windows のローカル実行で、`!` の出力の文字コードに左右されないようにするためです。
