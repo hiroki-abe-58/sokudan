@@ -87,7 +87,23 @@ def fake_loads(monkeypatch, tokenizer):
     monkeypatch.setattr(predict, "_mlx_importable", lambda: True)
     monkeypatch.setattr(torch.backends.mps, "is_available", lambda: True)
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 0)
     return calls, failing
+
+
+def test_auto_skips_cuda_when_it_is_available_but_has_no_device(fake_loads, checkpoint,
+                                                                 monkeypatch):
+    import sokudan
+    import sokudan.predict as predict
+
+    calls, failing = fake_loads
+    monkeypatch.setattr(predict, "_mlx_importable", lambda: False)
+    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    failing["torch/cpu"] = "raise"
+    with pytest.warns(RuntimeWarning), pytest.raises(RuntimeError, match="no backend"):
+        sokudan.load(checkpoint)
+    assert calls == [("torch", "cpu")]
 
 
 def test_auto_takes_mlx_first_on_apple_silicon(fake_loads, checkpoint):

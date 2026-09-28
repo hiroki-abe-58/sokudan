@@ -386,11 +386,13 @@ def _candidates(backend: str, device: str | None) -> Iterator[tuple[str, str]]:
         yield "mlx", "gpu"
     try:
         import torch
+
+        from sokudan.backends.torch_backend import cuda_usable
     except ImportError:
         return
     if torch.backends.mps.is_available():
         yield "torch", "mps"
-    if torch.cuda.is_available():
+    if cuda_usable():
         yield "torch", "cuda"
     yield "torch", "cpu"
 

@@ -14,11 +14,18 @@ from sokudan.backends import Backend, Batch, checkpoint_config
 from sokudan.config import BACKBONE_MODEL_ID
 
 
+def cuda_usable() -> bool:
+    """A CUDA device torch can address. `is_available()` alone is not enough: with
+    `CUDA_VISIBLE_DEVICES=""` it has been measured True with `device_count()` 0
+    (Windows, torch 2.11.0+cu128), and `get_device_name(0)` then fails."""
+    return torch.cuda.is_available() and torch.cuda.device_count() > 0
+
+
 def resolve_device(device: str | None = "auto") -> str:
     """`"auto"` (or None): cuda, then mps, then cpu. Any other value is used as given."""
     if device not in (None, "auto"):
         return device
-    if torch.cuda.is_available():
+    if cuda_usable():
         return "cuda"
     if torch.backends.mps.is_available():
         return "mps"

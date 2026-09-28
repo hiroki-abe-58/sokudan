@@ -8,9 +8,18 @@ import torch
 from sokudan.backends.torch_backend import resolve_device
 
 
-def _available(monkeypatch, *, cuda: bool, mps: bool) -> None:
+def _available(monkeypatch, *, cuda: bool, mps: bool, cuda_count: int | None = None) -> None:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: cuda)
+    count = (1 if cuda else 0) if cuda_count is None else cuda_count
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: count)
     monkeypatch.setattr(torch.backends.mps, "is_available", lambda: mps)
+
+
+@pytest.mark.parametrize(("mps", "expected"), [(True, "mps"), (False, "cpu")])
+def test_cuda_available_with_no_device_is_not_chosen(monkeypatch, mps, expected):
+    # Measured on Windows with CUDA_VISIBLE_DEVICES="": is_available() True, device_count() 0
+    _available(monkeypatch, cuda=True, mps=mps, cuda_count=0)
+    assert resolve_device("auto") == expected
 
 
 @pytest.mark.parametrize(("cuda", "mps", "expected"), [
