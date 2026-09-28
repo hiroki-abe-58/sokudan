@@ -217,7 +217,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", default=DEFAULT_MODEL_REF,
                         help="Hub repo id (optionally @revision), a directory with "
                              "model.safetensors, or a model.pt "
-                             f"(default {DEFAULT_MODEL_REF}, i.e. the Hub main = v0.2)")
+                             f"(default {DEFAULT_MODEL_REF}, i.e. the Hub main: v0.2 "
+                             "weights plus the v0.2.1 calibration.json)")
     parser.add_argument("--device", default=None,
                         help="cpu or cuda (default: cuda when available)")
     parser.add_argument("--temperatures", default=None,
