@@ -84,7 +84,7 @@ When a person confirms the suggestion, show the two most probable options, not o
 
 ## 5. Check the probabilities before showing confidence as a number
 
-`choice` probabilities are raw in v0.2.1 and will stay raw in 0.2.2:
+`choice` probabilities are raw in v0.2.1 and stay raw in v0.3.0:
 
 - One temperature (fitted on validation data) lowered the `choice` ECE on `bench_ja`: 0.088 → 0.066, with 15 equal-mass bins.
 - The same temperature raised it on `bench_en`: 0.091 → 0.228, because `bench_en` was already close to calibrated.
