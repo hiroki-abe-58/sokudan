@@ -7,7 +7,8 @@ States: the README Quickstart state (short), the same sentence repeated to ~400 
 tokens (long), and to ~950 state tokens (1k: joint sequences of about 1000 tokens).
 Questions: q1 = the Quickstart department (choice, 4 options); q3 = q1 + urgency (score,
 3 levels) + refund (bool). Per cell: 3 warm-up calls, then 30 timed calls. Also records
-the load average at start, peak RSS and, for MLX, `mx.get_peak_memory()`.
+the load average at start, peak RSS and, for MLX, `mx.get_peak_memory()`. Where the
+`resource` module does not exist (Windows), peak RSS is written as "測定していない".
 """
 
 from __future__ import annotations
@@ -16,13 +17,19 @@ import argparse
 import json
 import os
 import platform
-import resource
 import time
 from pathlib import Path
 
 import numpy as np
 
 import sokudan
+
+try:
+    import resource  # POSIX only; absent on Windows
+except ImportError:
+    resource = None
+
+NOT_MEASURED = "測定していない"
 
 SHORT = "先月の請求で同じ金額が二回引き落とされています。至急ご確認ください。"
 Q1 = {"department": {"type": "choice", "instructions": "この問い合わせはどの部署が担当すべきか",
@@ -43,7 +50,10 @@ def repeated(tokenizer, target: int) -> str:
     return text
 
 
-def peak_rss_bytes() -> int:
+def peak_rss_bytes() -> int | str:
+    """Peak RSS of this process, or `NOT_MEASURED` where `resource` does not exist."""
+    if resource is None:
+        return NOT_MEASURED
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return peak if platform.system() == "Darwin" else peak * 1024  # Linux reports KiB
 
@@ -103,8 +113,9 @@ def main() -> None:
 
         result["mlx"]["peak_memory_during_predict"] = mx.get_peak_memory()
     result["loadavg_end"] = os.getloadavg()
-    args.out.write_text(json.dumps(result, indent=1), encoding="utf-8")
-    print(json.dumps({k: result[k] for k in ("backend", "loadavg_start", "load_s")}),
+    args.out.write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
+    print(json.dumps({k: result[k] for k in ("backend", "loadavg_start", "load_s",
+                                              "peak_rss_bytes")}, ensure_ascii=False),
           {c: round(v["median_ms"], 1) for c, v in cells.items()})
 
 
