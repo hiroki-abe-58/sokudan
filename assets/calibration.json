@@ -1,0 +1,9 @@
+{
+ "checkpoint": "runs/release_candidate/model.pt",
+ "fitted_on": "bool: frozen held-out (all rows)",
+ "procedure": "docs/calibration.md \u00a73 (fit), \u00a78 (bool only)",
+ "min_bucket": 25,
+ "temperatures": {
+  "bool/2": 2.07006759103101
+ }
+}

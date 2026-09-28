@@ -1,0 +1,32 @@
+{
+ "checkpoint": "GeneLab/sokudan-ja-310m",
+ "sokudan": "0.2.0",
+ "lang": "ja",
+ "bench": "bench_ja.jsonl",
+ "temperatures": null,
+ "metrics": {
+  "n": 300,
+  "choice_acc": 0.88,
+  "score_acc": 0.8166666666666667,
+  "score_rps": 0.0745081131436207,
+  "noul_acc": 0.78,
+  "noul_auroc": 0.8440811544810692,
+  "noul_mean_p_true": 0.13279633333333338,
+  "noul_gold_rate": 0.2966666666666667
+ },
+ "timing": {
+  "load_s": 8.3,
+  "run_s": 7.1,
+  "ms_per_item": 23.6,
+  "questions_per_item": 3
+ },
+ "vram": {
+  "peak_allocated_gib": 1.26,
+  "peak_reserved_gib": 1.41
+ },
+ "env": {
+  "torch": "2.11.0+cu128",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "device": "cuda"
+ }
+}

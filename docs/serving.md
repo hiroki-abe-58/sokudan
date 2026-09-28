@@ -8,7 +8,7 @@
 
 ```bash
 pip install "sokudan[serve] @ git+https://github.com/hiroki-abe-58/sokudan.git"
-sokudan serve                                   # GeneLab/sokudan-ja-310m（HF の main = v0.2）を 127.0.0.1:8000 で
+sokudan serve                                   # GeneLab/sokudan-ja-310m（HF の main。重みは v0.2 と同じ）を 127.0.0.1:8000 で
 ```
 
 | オプション | 既定 | 意味 |
@@ -17,9 +17,8 @@ sokudan serve                                   # GeneLab/sokudan-ja-310m（HF �
 | `--host` | `127.0.0.1` | 他の機械から受けるなら `0.0.0.0` |
 | `--port` | `8000` | |
 | `--device` | CUDA があれば `cuda` | `cpu` で CPU 推論 |
-| `--temperatures` | なし（未較正） | `temperatures.json`。**同梱の温度は score の RPS を悪化させます**（README の Limits） |
+| `--temperatures` | 同梱の bool 較正 | 既定（v0.2.1）は、重みの横の `calibration.json` の **bool の温度だけ**を当てます（score と choice は生の確率）。`none` または `off` で較正なし。ファイルを指定すると、その温度をすべて当てます。環境変数 `SOKUDAN_TEMPERATURES` でも指定できます |
 | `--max-concurrency` / `--max-queue` | 1 / 32 | 同時に走らせる推論の数と、待たせる数。超えると 429 |
-| `--order-marginalize` | off | 推論時の順序平均。**未実装で、指定すると起動を拒否します** |
 
 モデルは起動時に 1 回だけ読み込みます。初回は Hub から重みを取得します。
 
@@ -29,7 +28,7 @@ sokudan serve                                   # GeneLab/sokudan-ja-310m（HF �
 curl -s localhost:8000/health
 ```
 
-`/health` は、読み込んだモデル、較正の有無、`order_marginalize`、state の描画のしかた、confidence の定義、上限を返します。モデルが無いときは 503 です。
+`/health` は、読み込んだモデル、較正の有無と温度（`calibrated`、`calibration.temperatures`）、state の描画のしかた、confidence の定義、上限を返します。モデルが無いときは 503 です。
 
 ```bash
 curl -s localhost:8000/v1/systemone -H 'content-type: application/json' -d '{
@@ -62,13 +61,14 @@ curl -s localhost:8000/v1/systemone -H 'content-type: application/json' -d '{
   },
   "usage": {"input_tokens": …, "output_tokens": 0},
   "sokudan": {"state_format": "text", "state_tokens": …, "state_truncated": false,
-              "backbone_passes": 3, "calibrated": false, "order_marginalize": false,
+              "backbone_passes": 3, "calibrated": true, "calibrated_answers": ["churn"],
               "latency_ms": …}
 }
 ```
 
 - `model` は要求に書いても無視され、答えたモデルの名前が返ります。
 - `usage.output_tokens` は常に 0 です。テキストを生成しないためです。
+- `sokudan.calibrated` は、この応答の答えに温度を当てたものがあるかです。既定では bool（`noul`）の答えだけが較正されるので、`calibrated_answers` はその質問名の一覧です（上の例では `churn`）。
 - `sokudan` の下は sokudan 独自の情報です。`backbone_passes` が質問数と同じなのは、v0.2 が質問ごとに state をエンコードし直す（joint encoding）ためで、**レイテンシは質問数に比例します**。
 - **state は文字列で送ってください。** object を送ると `key: value` の行に描画され、学習時の入力と違うので出力が変わります（README の注意）。どちらで読んだかは `sokudan.state_format` に出ます。
 
@@ -94,7 +94,7 @@ print(response.json()["answers"]["urgent"]["noul"])
 - 既存のクライアントから移すときに違うところ:
   - **英語の業務文は想定外です。** 学習は日本語のみで、`bench_en` の bool acc は多数決とほぼ同じです（README）。
   - `score` は 2〜10 水準、`choice` は 1〜255 選択肢。水準に `null` は使えません（422）。
-  - `confidence` は choice が `(p_max − 1/K)/(1 − 1/K)`、score が `max(0, 1 − E|level − mode|/D)` です（[`systemone_wire_format.md`](systemone_wire_format.md) §3）。**閾値は sokudan の出力で決め直してください。** 確率は既定で未較正です。
+  - `confidence` は choice が `(p_max − 1/K)/(1 − 1/K)`、score が `max(0, 1 − E|level − mode|/D)` です（[`systemone_wire_format.md`](systemone_wire_format.md) §3）。**閾値は sokudan の出力で決め直してください。** 既定で較正されるのは `noul` だけで、`choice` と `score` の確率は未較正です（[`calibration.md`](calibration.md)）。
   - `noul` の `criteria`（`true` / `false` の説明）は受け付けますが、精度への影響は測っていません。
 
 ## エラー

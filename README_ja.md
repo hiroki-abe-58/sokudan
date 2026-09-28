@@ -12,7 +12,7 @@
 - ライセンス: Apache-2.0
 - 開発環境: RTX 5090 (Blackwell, sm_120) 1枚
 
-> **Status: v0.2（2026-09-27）。** v0.1（2026-09-20〜21 の 2 日スプリント）と同じ設定で学習した 8 本の重みを平均した model soup です。
+> **Status: v0.2.1。** 重みは v0.2（2026-09-27）と同じで、v0.1（2026-09-20〜21 の 2 日スプリント）と同じ設定で学習した 8 本の重みを平均した model soup です。v0.2.1 では、`bool` の温度較正を既定で on にし、`/v1/systemone` 互換サーバー（`sokudan serve`）を加えました（[CHANGELOG](https://github.com/hiroki-abe-58/sokudan/blob/main/CHANGELOG.md)）。
 > 公開先: [`GeneLab/sokudan-ja-310m`](https://huggingface.co/GeneLab/sokudan-ja-310m)（v0.1 は revision `v0.1`）
 > **この README の数値はすべて本機で実行したコードの出力です。** 推定値はありません。
 > 未測定のものは「測定していない」と書きます。
@@ -138,16 +138,16 @@ print(result["answers"]["department"]["choice"])
 
 返ってくる確率は **head のロジットを直接読んだもの**です。
 モデルに「どれくらい自信があるか」を自己申告させた値ではありません。
-較正済みの確率がほしい場合は Stage 2 の温度を渡してください:
+**v0.2.1 の `load` は、重みに同梱した `calibration.json` の `bool` の温度（1 つ）だけを既定で当てます。** `choice` と `score` の確率は較正していない生の値です。
 
 ```python
-agent = sokudan.load("GeneLab/sokudan-ja-310m",
-                     temperatures="temperatures.json")
+agent = sokudan.load("GeneLab/sokudan-ja-310m")                     # bool だけ較正（既定）
+agent = sokudan.load("GeneLab/sokudan-ja-310m", temperatures=None)  # 較正なし（v0.2 と同じ）
 ```
 
-**温度を渡さない場合、確率は較正されていません。** 下の Limits を読んでください。
-**ただし同梱の温度は `score` の RPS を悪化させます**（0.090 → 0.149）。
-`choice` と `bool` だけに使うか、自前の検証セットで再フィットしてください。
+- 応答の `calibrated` は、温度を当てた答えがあるかを表します。`calibrated_answers` は、その質問 ID の一覧です。
+- `bool` の較正で、`bench_ja` の bool ECE は 0.181 → 0.105 になりました。bool acc と AUROC は変わりません（[`docs/calibration.md`](docs/calibration.md)）。
+- `score` と `choice` を較正しないのは、val で fit した `score` の温度が `bench_ja` の score RPS を悪化させたためです（0.075 → 0.132）。
 
 他のシードの重みは revision で取れます:
 
@@ -257,9 +257,9 @@ train / eval / serve はすべてここを import します。
   （[`docs/benchmarks.md`](docs/benchmarks.md) §5 の追試）。
   残る説明はその条件固有の選択肢の並びですが、**未検証の仮説です。**
   いずれにせよ K≥4 の性能を K=3 から外挿しないでください。
-- **温度較正は `score` を悪化させます。** choice ECE 0.147→0.092、bool ECE 0.202→0.129 と
-  改善する一方、**score RPS は 0.090→0.149 と悪化**します。既定は未較正です。
-  `temperatures.json` は同梱しますが、**自前の検証セットで再フィットすることを推奨します**。
+- **較正は `bool` だけです（v0.2.1 の既定）。** `score` と `choice` は生の確率です。
+  v0.2 で val に fit した `score` の温度は、`bench_ja` の score RPS を 0.075 → 0.132 に悪化させました（v0.1 でも 0.090 → 0.149）。
+  `bool` の温度（held-out で交差評価して fit）は、`bench_ja` の bool ECE を 0.181 → 0.105、`bench_en` を 0.249 → 0.151 に下げました（[`docs/calibration.md`](docs/calibration.md)）。
 - **評価は `bench_ja` の3スキーマのみ**（部署ルーティング4択 / 緊急度3段階 / 解約示唆）、
   300件・1ドメインです。他のタスクでの性能は測定していません。
 - **`choice` で Laya を上回ることは目標にしていません**（事前実測で既に実用水準だったため）。
@@ -300,7 +300,7 @@ train / eval / serve はすべてここを import します。
 - **エンコーディングは `[CLS] 指示 [SEP] 選択肢+マーカー [SEP] state [SEP]` の joint 方式**で、
   これは Laya と同じ配置です。state と質問を別系列にする方式も実装して A/B しましたが、
   未知スキーマへの意図推論が転移しませんでした（held-out AUROC 0.506 対 0.872）。
-- **温度を渡さない限り確率は較正されていません。**
+- **既定で較正されるのは `bool` だけです。** `score` と `choice` の確率は較正されていません。
 - **未実装**: act/escalate ヘッド（学習信号を定義できないので作らない）、
   RLCD (Stage 3)、ONNX/TensorRT。
 - **FlashAttention-2 は使っていません。** この機械ではビルドできませんでした

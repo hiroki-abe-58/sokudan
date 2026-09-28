@@ -1,4 +1,4 @@
-"""Gradio demo for `sokudan-ja-310m` v0.2, for a free CPU Space.
+"""Gradio demo for `sokudan-ja-310m` v0.2.1 (the v0.2 weights), for a free CPU Space.
 
 Paste a Japanese business message, pick any of three preset questions (department
 routing, urgency, churn suggestion) and optionally write one of your own. Every
@@ -9,10 +9,12 @@ Two things the demo shows rather than hides:
 
 * **The state is passed as a string.** A dict would be rendered as `key: value` lines,
   which is not the input the model was trained on (README, Limits).
-* **Probabilities are uncalibrated.** The shipped temperatures improve choice and bool
-  ECE but make score RPS worse, so the demo leaves them off and says so.
+* **Only the noul answers are calibrated.** `sokudan.load` applies the one bool
+  temperature shipped with the weights by default (v0.2.1); choice and score are raw,
+  because the score temperature fitted on validation made score RPS worse.
 
-This replaces `space/app.py` (written for v0.1, which passed the state as a dict).
+This replaced `space/app.py` (written for v0.1, which passed the state as a dict; removed
+in v0.2.1).
 """
 
 from __future__ import annotations
@@ -159,7 +161,7 @@ def analyse(text: str, presets: list[str], kind: str, instructions: str, options
 
 with gr.Blocks(title="sokudan-ja-310m") as demo:
     gr.Markdown(
-        """# 即断 / sokudan-ja-310m v0.2
+        """# 即断 / sokudan-ja-310m v0.2.1
 
 日本語の業務文を貼ると、選んだ質問に**テキストを生成せずに**答えます。
 確率は decision head のロジットから読んだ値で、モデルの自己申告ではありません。
@@ -200,10 +202,11 @@ with gr.Blocks(title="sokudan-ja-310m") as demo:
         """---
 **読む前に知っておいてほしい限界**（詳しくは README とモデルカード）:
 
-- **確率は較正していません。** 同梱の温度は choice と bool の ECE を改善しますが、
-  score の RPS を悪化させます。
-- **noul（はい/いいえ）は「はい」を過少に出します。** `bench_ja` で平均 P(はい) 0.133、
-  正解の陽性率 0.297。順位付けは機能します（AUROC 0.844）が、閾値はご自身で決めてください。
+- **較正しているのは noul（はい/いいえ）だけです。** 重みに同梱した温度を 1 つ当てています
+  （`bench_ja` の ECE 0.181 → 0.105）。choice と score の確率は較正していない生の値です。
+- **noul（はい/いいえ）は「はい」を過少に出します。** `bench_ja` で平均 P(はい) 0.133
+  （較正後 0.198）、正解の陽性率 0.297。
+  順位付けは機能します（AUROC 0.844）が、閾値はご自身で決めてください。
 - **4 段階以上の score では、第 1 水準がほとんど選ばれません。** 3 段階から外挿しないでください。
 - **学習データも評価データも合成データです**（業務の問い合わせ文）。
   ほかの種類の文では測っていません。

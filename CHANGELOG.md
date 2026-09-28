@@ -2,16 +2,48 @@
 
 数値はすべて本機で実行したコードの出力です。未測定のものは「測定していない」と書きます。
 
-## 未公開（ブランチ `feat/systemone-server`）
+## v0.2.1 — 2026-09-28 / パッケージ 0.2.1
 
-モデルの重みは変えていません。
+**モデルの重みは v0.2 と同じです**（`GeneLab/sokudan-ja-310m` の `model.safetensors` は変えていない）。
 
-- `sokudan serve`: `/v1/systemone` 互換のサーバー（`sokudan/serve/systemone.py`、`sokudan/serve/wire.py`）。TypeSafe の公開 API リファレンスの形で受けて返します。手順は `docs/serving.md`、各フィールドの扱いは `docs/systemone_wire_format.md`。
-  - noul の答えの `type` は `"noul"`、`confidence` はワイヤ形式の定義（choice は `(p_max − 1/K)/(1 − 1/K)`）。どちらも `Agent.predict` の返り値（`"bool"`、最大確率）とは違います。`predict` は変えていません。
-  - 推論時の順序平均（`--order-marginalize`）は未実装で、指定すると起動を拒否します。
-- README: `README.md` を英語に、日本語は `README_ja.md` に（`docs/readme_rewrite_notes.md`）。
-- `spaces/demo/`: v0.2 用の Gradio デモ（CPU）。state を文字列で渡します。
-- `pyproject.toml`: 依存の上限、`huggingface-hub` と `safetensors` の明記、extras `demo`、sdist の対象の絞り込み（`docs/release_pypi.md`）。
+### 較正: `bool` を既定で on
+
+- **`sokudan.load` は、重みに同梱した `calibration.json` の `bool` の温度（bool/2 = 2.070）を既定で当てます。** `temperatures=None` で無効にでき、その場合は v0.2 と同じ生の確率です。
+  - 温度は、held-out（frozen 9,850 行）の 2 分割交差で判定し、全行で fit したものです（`docs/calibration.md` §1〜§5）。
+  - bench は、v0.2 の出力（1 回だけ推論し直し、記録の値と差 0.0 で一致）に後から当てて判定しました（§6〜§9）。
+
+  | | bool ECE 前 → 後 | \|平均 P(true) − 正例率\| 前 → 後 |
+  |---|---|---|
+  | `bench_ja` | 0.181 → 0.105 | 0.164 → 0.098 |
+  | `bench_en` | 0.249 → 0.151 | 0.183 → 0.096 |
+
+  - bool acc（閾値 0.5）と AUROC は、構成上変わりません。
+- **`score` と `choice` は較正しません。** val で fit した score の温度（score/3 = 4.50）が、`bench_ja` の score RPS を 0.0745 → 0.1322 に悪化させたためです（`docs/calibration.md` §7）。
+- **応答に `calibrated`（温度を当てた答えがあるか）と `calibrated_answers`（その質問 ID）を足しました。**
+- `calibration.json` は Hub の `main` に置き、リポジトリにも同じもの（`assets/calibration.json`）を入れています。
+
+### `sokudan serve`: `/v1/systemone` 互換のサーバー
+
+- `sokudan/serve/systemone.py`、`sokudan/serve/wire.py`。TypeSafe の公開 API リファレンスの形で受けて返します。手順は `docs/serving.md`、各フィールドの扱いは `docs/systemone_wire_format.md` です。
+  - noul の答えの `type` は `"noul"`、`confidence` はワイヤ形式の定義（choice は `(p_max − 1/K)/(1 − 1/K)`）です。
+  - 較正は `load` と同じ既定です。`--temperatures none`（または `SOKUDAN_TEMPERATURES=none`）で無効になります。`/health` は、読み込んだモデルの温度を返します。各応答の `sokudan.calibrated` / `calibrated_answers` は、その応答で温度を当てた答えを表します。
+  - 推論時の順序平均の設定（`--order-marginalize`）は削除しました。順序の実験（推論時の平均、学習時の perm-KL、データ側の並べ替え）は、どれも見送りました（モデルカードの Limits）。
+
+### Hugging Face Space
+
+- `spaces/demo/`: v0.2.1 用の Gradio デモ（無料の CPU、state を文字列で渡す、noul だけ較正）。公開先は `GeneLab/sokudan-demo` です。
+- 以前の `space/`（v0.1 用）は削除しました。
+
+### PyPI
+
+- パッケージ名 `sokudan`、版 0.2.1 として配布できるように `pyproject.toml` を整えました（依存の上限、`huggingface-hub` と `safetensors` の明記、extras `serve` と `demo`、sdist の対象の絞り込み。`docs/release_pypi.md`）。
+
+### ドキュメント
+
+- README: 正本を英語の `README.md` にし、日本語の全文を `README_ja.md` にしました。`README_en.md` は削除しました。README のリンクは絶対 URL です。
+- `docs/baseline_lev.md`: lev（interfaze-ai/lev）と sokudan v0.2 を、同じマシン・同じハーネスで比べた表（3 型、score の位置感度、速度と VRAM）。
+- モデルカード（v0.2.1）: 較正の節、位置感度の「試した対策と結果」（3 系統とも不採用）、別ドメインのデータを足した試験（specialist 0.703、held-out は低下）。
+- `docs/calibration.md`、`docs/latency.md`（v0.2 の 3 問 × 1 件: 中央値 22.8 ms、RTX 5090）。`docs/benchmarks.md` §10 の見出しは「v0.2（S8_old: v0.1 seed 0〜7 の soup）」にしました。
 
 ## v0.2 — 2026-09-27（モデル）/ パッケージ 0.2.0
 

@@ -34,10 +34,10 @@
 | noul の答え | `{"type": "noul", "noul": P(yes)}`。confidence は無い | API ref、`NoulResponse` | 同じ。`predict` の `type: "bool"` を `"noul"` に直す |
 | choice の答え | `{"type": "choice", "choice", "probabilities": {選択肢: 確率}, "confidence"}` | API ref、`ChoiceResponse` | 同じ 4 フィールド。`probabilities` は criteria と同じ順序 |
 | score の答え | `{"type": "score", "score": 確率で重み付けした水準, "legend": {"0": 水準, …}, "probabilities": {"0": 確率, …}, "confidence"}` | API ref、`ScoreResponse`、`ScoreLegend` | 同じ 5 フィールド。`score` は `predict` の期待値。`legend` は**送られた水準をそのまま**（object の水準なら object）返す |
-| `probabilities` | 合計 1 の浮動小数 | API ref | head の softmax（`predict` の値、小数第 4 位で丸め）。既定は未較正。`--temperatures` を渡すと較正後 |
+| `probabilities` | 合計 1 の浮動小数 | API ref | head の softmax（`predict` の値、小数第 4 位で丸め）。既定（v0.2.1）は `noul` だけ温度で較正し、`choice` と `score` は未較正。`--temperatures none` で全部未較正、ファイルを渡すとその温度 |
 | `confidence` | 0〜1、確率から導く。定義は API ref に無い | confidence の頁 | 下の §3 の定義で、返す `probabilities` から計算する。**`predict` の `confidence`（最大確率）とは別の値** |
 | `usage` | `{"input_tokens", "output_tokens"}` | API ref、SDK `Usage` | `input_tokens` = backbone が読んだトークン数（joint encoding では state を質問の数だけ数える）。`output_tokens` は常に 0（生成しない） |
-| sokudan 独自 | — | — | 最上位の `sokudan` に 1 つにまとめる: `state_format`、`state_tokens`、`state_truncated`、`backbone_passes`、`calibrated`、`order_marginalize`、`latency_ms`。`usage` は仕様の 2 フィールドだけにしてある |
+| sokudan 独自 | — | — | 最上位の `sokudan` に 1 つにまとめる: `state_format`、`state_tokens`、`state_truncated`、`backbone_passes`、`calibrated`（この応答で温度を当てた答えがあるか）、`calibrated_answers`（その質問名）、`latency_ms`。`usage` は仕様の 2 フィールドだけにしてある |
 
 ## 3. confidence の定義
 
@@ -82,5 +82,5 @@
 
 ## 6. まだ無いもの
 
-- **推論時の順序平均（`order_marginalize`）**: 設定だけあり、既定は off。on にすると起動を拒否します（黙って無視しない）。実装は、順序の実験の結果を見て決めます。
+- **推論時の順序平均**: サーバーの設定にはありません。順序の実験（推論時の平均、学習時の perm-KL、データ側の並べ替え）は、どれも held-out の精度の非劣化を示せず見送りました（`model_card_v0.2.md` の Limits）。Python の `predict(order_marginalize=...)` の引数は残っていますが、既定は off です。
 - `/v1/models`（kev にある）、`permute` / `separate`（kev にある）、`x-typesafe-request-id` ヘッダ: 実装していません。

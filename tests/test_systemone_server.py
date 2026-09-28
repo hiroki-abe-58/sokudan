@@ -345,10 +345,26 @@ def test_authorization_header_is_accepted_and_not_checked(client):
         assert response.status_code == 200
 
 
-def test_uncalibrated_by_default_and_the_response_says_so(client):
+def test_the_response_says_whether_it_was_calibrated(client):
+    # the fake agent carries no temperatures and reports none
     body = post(client, {"state": STATE, "questions": {"q": QUESTIONS["churn"]}}).json()
     assert body["sokudan"]["calibrated"] is False
-    assert body["sokudan"]["order_marginalize"] is False
+    assert body["sokudan"]["calibrated_answers"] == []
+    assert "order_marginalize" not in body["sokudan"]
+
+
+def test_predicts_calibration_fields_reach_the_response(agent):
+    real = agent.predict
+
+    def calibrated_predict(state, questions):
+        out = real(state, questions)
+        return {**out, "calibrated": True, "calibrated_answers": ["q"]}
+
+    agent.predict = calibrated_predict
+    with TestClient(create_app(agent, ServerSettings(model_ref="test/fake"))) as client:
+        body = post(client, {"state": STATE, "questions": {"q": QUESTIONS["churn"]}}).json()
+    assert body["sokudan"]["calibrated"] is True
+    assert body["sokudan"]["calibrated_answers"] == ["q"]
 
 
 # ---------------------------------------------------------------------------
@@ -441,26 +457,69 @@ def test_health_reports_what_a_client_needs_to_know(client):
     assert body["model"] == "sokudan-ja-310m"
     assert body["model_ref"] == "test/fake"
     assert body["calibrated"] is False
-    assert body["order_marginalize"] is False
+    assert body["calibration"]["temperatures"] == {}
+    assert "order_marginalize" not in body
     assert "key: value" in body["state_rendering"]["object_as_key_value_lines"]
     assert "not the training input" in body["state_rendering"]["object_as_key_value_lines"]
     assert body["limits"]["max_choice_options"] == 255
     assert body["limits"]["score_levels"] == [2, 10]
 
 
-def test_order_marginalize_is_off_by_default_and_refused_when_on(agent):
-    assert ServerSettings().order_marginalize is False
-    assert health_body(ServerSettings(), loaded=True)["order_marginalize"] is False
-    with pytest.raises(NotImplementedError, match="order_marginalize"):
-        create_app(agent, ServerSettings(order_marginalize=True))
+def test_the_order_marginalize_setting_is_gone():
+    assert not hasattr(ServerSettings(), "order_marginalize")
+    assert "order_marginalize" not in health_body(ServerSettings(), loaded=True)
 
 
-def test_cli_lists_serve_and_refuses_order_marginalize(capsys):
+def test_cli_lists_serve_and_no_longer_takes_order_marginalize(capsys):
     from sokudan.cli import main
 
     assert main(["--help"]) == 0
     assert "serve" in capsys.readouterr().out
-    assert main(["serve", "--order-marginalize"]) == 2
+    with pytest.raises(SystemExit) as exit_info:
+        main(["serve", "--order-marginalize"])
+    assert exit_info.value.code == 2  # argparse: unrecognised argument
+
+
+@pytest.mark.parametrize(("flag", "env", "expected"), [
+    (None, None, {}),                                  # load()'s default: shipped bool
+    ("none", None, {"temperatures": None}),
+    ("OFF", None, {"temperatures": None}),
+    ("t.json", None, {"temperatures": "t.json"}),
+    (None, "none", {"temperatures": None}),
+    (None, "x.json", {"temperatures": "x.json"}),
+    ("t.json", "none", {"temperatures": "t.json"}),    # the flag wins
+])
+def test_temperatures_setting(monkeypatch, flag, env, expected):
+    from sokudan.serve.systemone import temperatures_setting
+
+    if env is None:
+        monkeypatch.delenv("SOKUDAN_TEMPERATURES", raising=False)
+    else:
+        monkeypatch.setenv("SOKUDAN_TEMPERATURES", env)
+    assert temperatures_setting(flag) == expected
+
+
+def test_load_agent_reports_what_was_actually_loaded(monkeypatch):
+    import sokudan
+    from sokudan.serve.systemone import load_agent
+
+    class Loaded:
+        device = "cpu"
+        temperatures = {("bool", 2): 2.07}
+
+    seen = {}
+
+    def fake_load(ref, **kwargs):
+        seen.update(kwargs)
+        return Loaded()
+
+    monkeypatch.delenv("SOKUDAN_TEMPERATURES", raising=False)
+    monkeypatch.setattr(sokudan, "load", fake_load)
+    settings = ServerSettings(model_ref="test/fake")
+    load_agent(settings)
+    assert "temperatures" not in seen          # load()'s own default
+    assert settings.calibrated is True
+    assert health_body(settings, loaded=True)["calibration"]["temperatures"] == {"bool/2": 2.07}
 
 
 def test_cli_serve_help_names_the_default_model(capsys):

@@ -2,7 +2,8 @@
 # the CUDA ones. Listed first so pip resolves torch from this index.
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.8
-# The package itself, pinned to the v0.2 tag of the public repository. Brings
-# transformers, safetensors (via transformers) and huggingface_hub with it.
-sokudan @ git+https://github.com/hiroki-abe-58/sokudan.git@v0.2
+# The package itself, pinned to the v0.2.1 tag of the public repository (bool
+# calibration on by default). Brings transformers, safetensors (via transformers) and
+# huggingface_hub with it.
+sokudan @ git+https://github.com/hiroki-abe-58/sokudan.git@v0.2.1
 gradio>=6.0,<7

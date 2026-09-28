@@ -1,0 +1,59 @@
+{
+ "checkpoint": "interfaze-ai/lev",
+ "lev": "0.1.1",
+ "bench": "bench_en.jsonl",
+ "lang": "en",
+ "states": 290,
+ "uncalibrated": true,
+ "calibration_temperatures": {},
+ "checks": {
+  "score_slot0_identical": {
+   "metric": -0.9309853927203064,
+   "leave_one_out": [
+    -0.9422043204536716,
+    -0.9239114763552478
+   ],
+   "by_config": {
+    "moderate|3": -0.3316091954022989,
+    "moderate|4": -0.6638469827586206,
+    "moderate|5": -0.8990517241379311,
+    "a request|3": -0.9072557471264369,
+    "a request|4": -1.2933728448275863,
+    "a request|5": -1.4907758620689655
+   }
+  },
+  "score_first_slot_permuted": {
+   "metric": 0.26954022988505744,
+   "leave_one_out": [
+    0.2675893886966551,
+    0.27047289504036903
+   ],
+   "decisions": 1740,
+   "argmax_by_slot": [
+    469,
+    604,
+    667
+   ],
+   "picks_by_label": {
+    "Not urgent": 434,
+    "Soon": 446,
+    "Work is blocked": 860
+   },
+   "order_invariant_states": 212
+  }
+ },
+ "timing": {
+  "load_s": 11.9,
+  "run_s": 123.9,
+  "ms_per_state": 427.2,
+  "questions_per_state": 12
+ },
+ "vram": {
+  "peak_allocated_gib": 11.28,
+  "peak_reserved_gib": 26.31
+ },
+ "env": {
+  "torch": "2.8.0+cu128",
+  "gpu": "NVIDIA GeForce RTX 5090"
+ }
+}

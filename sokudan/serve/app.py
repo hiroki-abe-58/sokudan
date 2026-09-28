@@ -22,10 +22,15 @@ marker logits, optionally divided by a fitted temperature. They are not a number
 model wrote out as text and they are not self-reported. `docs/architecture.md` has
 the mechanism.
 
-**Calibration is opt-in and its absence is reported.** Without
-`SOKUDAN_TEMPERATURES` the probabilities are raw head outputs; `calibrated: false`
-appears in every response and `/ready` says so too. A client cannot accidentally
-treat uncalibrated numbers as calibrated ones without the response saying otherwise.
+**Calibration and its absence are reported.** v0.2.1: without `SOKUDAN_TEMPERATURES`
+the server loads the checkpoint the way `sokudan.load` does by default -- the bool
+temperatures of the `calibration.json` beside it, when there is one (score and choice
+stay raw). `SOKUDAN_TEMPERATURES=none` (or `off`) turns calibration off; a path applies
+that file whole. Every response carries `calibrated` (whether a temperature was applied
+to any of its answers) and `calibrated_answers` (which ones), from `Agent.predict`
+(docs/calibration.md §10), and `/ready` says whether the loaded model has any
+temperatures. A client cannot treat uncalibrated numbers as calibrated ones without the
+response saying otherwise.
 """
 
 from __future__ import annotations
@@ -111,10 +116,15 @@ def load_agent() -> None:
     try:
         import sokudan
 
-        temperatures = os.environ.get("SOKUDAN_TEMPERATURES") or None
-        state.agent = sokudan.load(checkpoint, temperatures=temperatures)
+        setting = os.environ.get("SOKUDAN_TEMPERATURES") or ""
+        if setting.lower() in ("none", "off"):
+            state.agent = sokudan.load(checkpoint, temperatures=None)
+        elif setting:
+            state.agent = sokudan.load(checkpoint, temperatures=setting)
+        else:  # v0.2.1 default: calibration.json beside the checkpoint, bool only
+            state.agent = sokudan.load(checkpoint)
         state.checkpoint = checkpoint
-        state.calibrated = bool(temperatures)
+        state.calibrated = bool(getattr(state.agent, "temperatures", None))
         state.load_error = None
     except Exception as exc:  # noqa: BLE001 -- surfaced through /ready, not swallowed
         state.load_error = f"{type(exc).__name__}: {exc}"
@@ -156,7 +166,8 @@ async def ready() -> JSONResponse:
         "calibrated": state.calibrated,
         "calibration_note": (
             None if state.calibrated else
-            "確率は較正されていません。SOKUDAN_TEMPERATURES を設定してください。"
+            "確率は較正されていません。チェックポイントの横に calibration.json を置くか、"
+            "SOKUDAN_TEMPERATURES を設定してください。"
         ),
         "limits": {
             "max_questions": MAX_QUESTIONS,
@@ -211,8 +222,11 @@ async def systemone(request: SystemOneRequest, http: Request) -> dict[str, Any]:
     finally:
         state.inflight -= 1
 
-    result["calibrated"] = state.calibrated
-    if not state.calibrated:
+    # per response from `Agent.predict` (v0.2.1); a model without that field (older code,
+    # test doubles) falls back to whether the loaded model has any temperatures
+    result.setdefault("calibrated", state.calibrated)
+    result.setdefault("calibrated_answers", [])
+    if not result["calibrated"]:
         result["calibration_note"] = (
             "確率は較正されていません。README の Limits を参照してください。"
         )

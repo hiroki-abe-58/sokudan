@@ -1,0 +1,88 @@
+[
+ {
+  "model": "sokudan-ja-310m",
+  "answers": {
+   "department": {
+    "type": "choice",
+    "choice": "営業",
+    "probabilities": {
+     "請求": 0.2493,
+     "技術": 0.2492,
+     "営業": 0.2539,
+     "その他": 0.2477
+    },
+    "confidence": 0.2539
+   },
+   "urgency": {
+    "type": "score",
+    "score": 0.8047185838222504,
+    "probabilities": {
+     "0": 0.4062,
+     "1": 0.383,
+     "2": 0.2109
+    },
+    "legend": {
+     "0": "急がない",
+     "1": "早めに",
+     "2": "業務が止まっている"
+    },
+    "confidence": 0.4062
+   },
+   "churn": {
+    "type": "bool",
+    "noul": 0.5005
+   }
+  },
+  "encoding": "joint",
+  "usage": {
+   "state_tokens": 13,
+   "state_truncated": false,
+   "question_tokens": 73,
+   "backbone_passes": 3,
+   "output_tokens": 0
+  }
+ },
+ {
+  "model": "sokudan-ja-310m",
+  "answers": {
+   "department": {
+    "type": "choice",
+    "choice": "営業",
+    "probabilities": {
+     "請求": 0.2501,
+     "技術": 0.2489,
+     "営業": 0.2539,
+     "その他": 0.2471
+    },
+    "confidence": 0.2539
+   },
+   "urgency": {
+    "type": "score",
+    "score": 0.8047185838222504,
+    "probabilities": {
+     "0": 0.4062,
+     "1": 0.383,
+     "2": 0.2109
+    },
+    "legend": {
+     "0": "急がない",
+     "1": "早めに",
+     "2": "業務が止まっている"
+    },
+    "confidence": 0.4062
+   },
+   "churn": {
+    "type": "bool",
+    "noul": 0.5016
+   }
+  },
+  "encoding": "joint",
+  "usage": {
+   "state_tokens": 14,
+   "state_truncated": false,
+   "question_tokens": 73,
+   "backbone_passes": 3,
+   "output_tokens": 0
+  }
+ }
+]

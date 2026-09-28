@@ -1,0 +1,68 @@
+{
+ "checkpoint": "interfaze-ai/lev",
+ "lev": "0.1.1",
+ "bench": "bench_ja.jsonl",
+ "lang": "ja",
+ "states": 300,
+ "uncalibrated": false,
+ "calibration_temperatures": {
+  "choice:B:large": 0.6333014152276044,
+  "choice:B": 0.6333014152276044,
+  "noul:A": 2.3332930831706458,
+  "score:A": 2.8033236630327885,
+  "choice:A": 1.7666659539679779,
+  "choice:A:small": 1.789783450971802,
+  "choice:A:mid": 1.6085685001661532,
+  "choice:A:large": 1.6641112617330986
+ },
+ "checks": {
+  "score_slot0_identical": {
+   "metric": -0.5183843354362885,
+   "leave_one_out": [
+    -0.5224504999640467,
+    -0.5154055481920253
+   ],
+   "by_config": {
+    "中程度|3": -0.18881357245168184,
+    "中程度|4": -0.2986967794842911,
+    "中程度|5": -0.3916482000080149,
+    "依頼|3": -0.5884879594807338,
+    "依頼|4": -0.7643271015241805,
+    "依頼|5": -0.8783323996688286
+   }
+  },
+  "score_first_slot_permuted": {
+   "metric": 0.24,
+   "leave_one_out": [
+    0.2391304347826087,
+    0.2408026755852843
+   ],
+   "decisions": 1800,
+   "argmax_by_slot": [
+    432,
+    635,
+    733
+   ],
+   "picks_by_label": {
+    "急がない": 295,
+    "早めに": 766,
+    "業務が止まっている": 739
+   },
+   "order_invariant_states": 188
+  }
+ },
+ "timing": {
+  "load_s": 12.5,
+  "run_s": 119.8,
+  "ms_per_state": 399.3,
+  "questions_per_state": 12
+ },
+ "vram": {
+  "peak_allocated_gib": 11.29,
+  "peak_reserved_gib": 28.69
+ },
+ "env": {
+  "torch": "2.8.0+cu128",
+  "gpu": "NVIDIA GeForce RTX 5090"
+ }
+}

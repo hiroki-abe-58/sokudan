@@ -16,6 +16,7 @@ are the head's logits read directly, not a model's own report of its confidence.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -80,10 +81,22 @@ class Agent:
         self,
         state: str | dict[str, Any] | list[Any],
         questions: dict[str, dict[str, Any] | Question],
+        *,
+        order_marginalize: bool | Mapping[str, bool] = False,
     ) -> dict[str, Any]:
-        """Answer every question about one state in a single pass per question batch."""
+        """Answer every question about one state in a single pass per question batch.
+
+        `order_marginalize=True` (joint encoding only; off by default, which keeps the
+        single pass) asks each question again with its options reordered -- the K cyclic
+        shifts of a `choice`, the original and reversed levels of a `score`, the two slot
+        orders of a `bool` -- maps every answer back to the original order and averages
+        the probabilities before any temperature (`sokudan.order_marginalize`,
+        docs/order_marginalization.md). All the reorderings go through the backbone in one
+        batch, one row each. A mapping picks the types, e.g.
+        `{"choice": False, "score": True, "bool": False}` (types left out are off); the
+        other types are asked once, in the same batch. All off is the single pass.
+        """
         from sokudan.calibration.temperature import apply_temperature
-        from sokudan.encoding.state import encode_state
 
         if not questions:
             raise ValueError("no questions given")
@@ -94,7 +107,92 @@ class Agent:
             for qid, question in parsed.items()
         }
 
+        from sokudan.order_marginalize import marginalized_types
+
         text = self._state_text(state)
+        order = list(prepared)
+        types = marginalized_types(order_marginalize)
+        if types:
+            if self.encoding != "joint":
+                raise NotImplementedError("order_marginalize needs the joint encoding")
+            from sokudan.order_marginalize import combine, variants
+
+            expanded: dict[str, _Prepared] = {}
+            perms: dict[str, list[tuple[str, list[int]]]] = {}
+            for qid in order:
+                item = prepared[qid]
+                if item.kind not in types:
+                    expanded[qid] = item
+                    continue
+                for i, (question, perm) in enumerate(variants(item.question)):
+                    key = f"{qid}\x1f{i}"
+                    expanded[key] = _Prepared(question, item.kind, list(item.labels))
+                    perms.setdefault(qid, []).append((key, perm))
+            rows, n, state_tokens, truncated, question_tokens = self._forward(text, expanded)
+            raw = {qid: (combine([rows[key] for key, _ in perms[qid]],
+                                 [perm for _, perm in perms[qid]])
+                         if qid in perms else rows[qid])
+                   for qid in order}
+        else:
+            raw, n, state_tokens, truncated, question_tokens = self._forward(text, prepared)
+
+        answers: dict[str, Any] = {}
+        calibrated: list[str] = []
+        for qid in order:
+            item = prepared[qid]
+            k = len(item.labels)
+            row_probs = raw[qid]
+            temperature = self.temperatures.get((item.kind, k), 1.0)
+            if temperature != 1.0:
+                row_probs = apply_temperature(row_probs.reshape(1, -1), temperature)[0]
+                calibrated.append(qid)
+
+            entry: dict[str, Any] = {"type": item.kind}
+            if item.kind == "score":
+                entry["score"] = float((row_probs * range(k)).sum())
+                entry["probabilities"] = {str(i): round(float(p), 4)
+                                          for i, p in enumerate(row_probs)}
+                entry["legend"] = {str(i): label for i, label in enumerate(item.labels)}
+            elif item.kind == "bool":
+                entry["noul"] = round(float(row_probs[1]), 4)
+            else:
+                best = int(row_probs.argmax())
+                entry["choice"] = item.labels[best]
+                entry["probabilities"] = {label: round(float(p), 4)
+                                          for label, p in zip(item.labels, row_probs,
+                                                              strict=True)}
+            if item.kind != "bool":
+                entry["confidence"] = round(float(row_probs.max()), 4)
+            answers[qid] = entry
+
+        usage = {
+            "state_tokens": state_tokens,
+            "state_truncated": truncated,
+            "question_tokens": max(question_tokens, 0),
+            "backbone_passes": n if self.encoding == "joint" else 2,
+            "output_tokens": 0,
+        }
+        if types:
+            usage["order_marginalized"] = (True if types == {"choice", "score", "bool"}
+                                           else sorted(types))
+        return {
+            "model": "sokudan-ja-310m",
+            "answers": answers,
+            "encoding": self.encoding,
+            # v0.2.1 (docs/calibration.md §10): whether a temperature was applied to any
+            # answer, and to which (by default only bool answers are calibrated).
+            "calibrated": bool(calibrated),
+            "calibrated_answers": calibrated,
+            "usage": usage,
+        }
+
+
+
+    def _forward(self, text: str, prepared: dict[str, _Prepared]):
+        """One batch through the model: `({qid: probabilities over its K options}, rows,
+        state tokens, truncated, question tokens)`."""
+        from sokudan.encoding.state import encode_state
+
         order = list(prepared)
         n = len(order)
         pad_id = self.tokenizer.pad_token_id
@@ -166,46 +264,10 @@ class Agent:
             )
             question_tokens = int(attention_mask.sum())
         probs = out.probs.float().cpu().numpy()
+        rows = {qid: probs[row, :len(prepared[qid].labels)]
+                for row, qid in enumerate(order)}
+        return rows, n, state_tokens, truncated, question_tokens
 
-        answers: dict[str, Any] = {}
-        for row, qid in enumerate(order):
-            item = prepared[qid]
-            k = len(item.labels)
-            row_probs = probs[row, :k]
-            temperature = self.temperatures.get((item.kind, k), 1.0)
-            if temperature != 1.0:
-                row_probs = apply_temperature(row_probs.reshape(1, -1), temperature)[0]
-
-            entry: dict[str, Any] = {"type": item.kind}
-            if item.kind == "score":
-                entry["score"] = float((row_probs * range(k)).sum())
-                entry["probabilities"] = {str(i): round(float(p), 4)
-                                          for i, p in enumerate(row_probs)}
-                entry["legend"] = {str(i): label for i, label in enumerate(item.labels)}
-            elif item.kind == "bool":
-                entry["noul"] = round(float(row_probs[1]), 4)
-            else:
-                best = int(row_probs.argmax())
-                entry["choice"] = item.labels[best]
-                entry["probabilities"] = {label: round(float(p), 4)
-                                          for label, p in zip(item.labels, row_probs,
-                                                              strict=True)}
-            if item.kind != "bool":
-                entry["confidence"] = round(float(row_probs.max()), 4)
-            answers[qid] = entry
-
-        return {
-            "model": "sokudan-ja-310m",
-            "answers": answers,
-            "encoding": self.encoding,
-            "usage": {
-                "state_tokens": state_tokens,
-                "state_truncated": truncated,
-                "question_tokens": max(question_tokens, 0),
-                "backbone_passes": n if self.encoding == "joint" else 2,
-                "output_tokens": 0,
-            },
-        }
 
 
 def _resolve_checkpoint(checkpoint: str | Path) -> tuple[dict, Path | None]:
@@ -258,11 +320,61 @@ def _load_directory(directory: Path) -> dict:
     return {"state_dict": load_file(str(weights)), "config": config}
 
 
+def read_temperatures(path: str | Path) -> dict[tuple[str, int], float]:
+    """`{(type, option count): T}` from a temperatures file: `temperatures.json` from
+    `scripts/calibrate.py` or `calibration.json` from `scripts/calibration_heldout.py`
+    (docs/calibration.md) -- both hold `{"temperatures": {"bool/2": T, ...}}`."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    parsed: dict[tuple[str, int], float] = {}
+    for key, value in data["temperatures"].items():
+        kind, _, count = key.partition("/")
+        parsed[(kind, int(count))] = float(value)
+    return parsed
+
+
+DEFAULT_CALIBRATION = "calibration.json"
+"""v0.2.1: the calibration file `load` looks for beside the checkpoint by default. Only its
+bool temperatures are applied by default (docs/calibration.md §8-§10)."""
+
+
+def resolve_temperatures(
+    temperatures: str | Path | dict[tuple[str, int], float] | None,
+    resolved_dir: Path | None,
+) -> dict[tuple[str, int], float]:
+    """What `load` applies.
+
+    - `DEFAULT_CALIBRATION` (the default): the `calibration.json` beside the checkpoint
+      (the `.pt` file's directory, the safetensors directory, or the Hub download), bool
+      temperatures only; no file there means no calibration.
+    - `None`: no calibration (the raw head probabilities).
+    - a bare file name: that file beside the checkpoint, else the path as given; any other
+      path: that file (it must exist); a dict: as given. All of these are applied whole.
+    """
+    if temperatures is None:
+        return {}
+    if isinstance(temperatures, dict):
+        return dict(temperatures)
+    default = str(temperatures) == DEFAULT_CALIBRATION
+    path = Path(temperatures)
+    if (resolved_dir is not None and not path.exists()
+            and path.name == str(temperatures)):
+        # A bare name beside a Hub / directory / .pt checkpoint: the file that came with
+        # the weights rather than the working directory's.
+        candidate = resolved_dir / str(temperatures)
+        if candidate.exists():
+            path = candidate
+    if default:
+        if not path.exists():
+            return {}
+        return {k: t for k, t in read_temperatures(path).items() if k[0] == "bool"}
+    return read_temperatures(path)
+
+
 def load(
     checkpoint: str | Path,
     *,
     device: str | None = None,
-    temperatures: str | Path | dict[tuple[str, int], float] | None = None,
+    temperatures: str | Path | dict[tuple[str, int], float] | None = DEFAULT_CALIBRATION,
 ) -> Agent:
     """Load a checkpoint, from disk or from the Hub.
 
@@ -272,13 +384,13 @@ def load(
             `GeneLab/sokudan-ja-310m`. A repo id may carry a revision after `@`
             (`GeneLab/sokudan-ja-310m@seed1`).
         device: defaults to cuda when available.
-        temperatures: a `temperatures.json` from `scripts/calibrate.py`, a dict, or
-            `"temperatures.json"` to take the one shipped beside a Hub checkpoint.
-            Without it the model reports its raw head probabilities, which are
-            **not calibrated** -- see the README's Limits section.
+        temperatures: by default (v0.2.1) the `calibration.json` shipped beside the
+            checkpoint, **bool temperatures only** -- score and choice stay raw
+            (docs/calibration.md §10). `None` turns calibration off (the raw head
+            probabilities, as in v0.2). A path to a `temperatures.json` /
+            `calibration.json`, or a dict, applies that file or dict whole. Each
+            response says whether a temperature was applied (`calibrated`).
     """
-    import json
-
     from transformers import AutoTokenizer
 
     from sokudan.config import BACKBONE_MODEL_ID
@@ -286,17 +398,7 @@ def load(
 
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     blob, resolved_dir = _resolve_checkpoint(checkpoint)
-    if (
-        resolved_dir is not None
-        and isinstance(temperatures, (str, Path))
-        and not Path(temperatures).exists()
-        and Path(temperatures).name == str(temperatures)
-    ):
-        # `temperatures="temperatures.json"` beside a Hub checkpoint: resolve it to
-        # the file that came down with the weights rather than the working directory.
-        candidate = resolved_dir / str(temperatures)
-        if candidate.exists():
-            temperatures = candidate
+    parsed = resolve_temperatures(temperatures, resolved_dir)
     config = blob.get("config", {})
     backbone_id = config.get("backbone", BACKBONE_MODEL_ID)
     encoding = config.get("encoding", "separate")
@@ -319,15 +421,6 @@ def load(
         )
     model.load_state_dict(blob["state_dict"])
     model.to(device).eval()
-
-    parsed: dict[tuple[str, int], float] = {}
-    if isinstance(temperatures, (str, Path)):
-        data = json.loads(Path(temperatures).read_text(encoding="utf-8"))
-        for key, value in data["temperatures"].items():
-            kind, _, count = key.partition("/")
-            parsed[(kind, int(count))] = float(value)
-    elif isinstance(temperatures, dict):
-        parsed = temperatures
 
     return Agent(model, AutoTokenizer.from_pretrained(backbone_id),
                  device=device, temperatures=parsed, encoding=encoding)

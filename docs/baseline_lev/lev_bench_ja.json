@@ -1,0 +1,30 @@
+{
+ "checkpoint": "interfaze-ai/lev",
+ "lev": "0.1.1",
+ "lang": "ja",
+ "bench": "bench_ja.jsonl",
+ "metrics": {
+  "n": 300,
+  "choice_acc": 0.8866666666666667,
+  "score_acc": 0.6433333333333333,
+  "score_rps": 0.13841648477870036,
+  "noul_acc": 0.8166666666666667,
+  "noul_auroc": 0.8890249747057883,
+  "noul_mean_p_true": 0.15857198844671921,
+  "noul_gold_rate": 0.2966666666666667
+ },
+ "timing": {
+  "load_s": 12.0,
+  "run_s": 45.6,
+  "ms_per_item": 152.1,
+  "questions_per_item": 3
+ },
+ "vram": {
+  "peak_allocated_gib": 9.21,
+  "peak_reserved_gib": 15.34
+ },
+ "env": {
+  "torch": "2.8.0+cu128",
+  "gpu": "NVIDIA GeForce RTX 5090"
+ }
+}

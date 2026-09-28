@@ -19,15 +19,20 @@ took (`sokudan.backbone_passes`).
 **Authorization.** A bearer header is accepted and not checked. This is a local
 server; put it behind something that authenticates before exposing it.
 
-**order_marginalize** (averaging the answer over option orders at inference time)
-is a setting with no implementation yet. It is off by default, reported by `/health`,
-and turning it on is refused at startup rather than silently ignored.
+**Calibration** (v0.2.1). The server loads the model the way `sokudan.load` does by
+default: the bool temperatures of the `calibration.json` shipped beside the weights
+(score and choice stay raw; docs/calibration.md). `--temperatures none` (or `off`, or
+the environment variable `SOKUDAN_TEMPERATURES=none`) serves the raw probabilities; a
+path applies that file. `/health` says whether the loaded model has any temperature and
+which; each response says whether a temperature was applied to any of its answers
+(`sokudan.calibrated`) and to which (`sokudan.calibrated_answers`).
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -62,7 +67,8 @@ class ServerSettings:
     # 1 by default: the question-encoding cache inside `Agent` is a plain dict.
     max_concurrency: int = 1
     max_queue: int = 32
-    order_marginalize: bool = False
+    # the loaded model's temperatures, as "type/K" -> T (empty: uncalibrated)
+    temperatures: dict[str, float] | None = None
 
 
 def health_body(settings: ServerSettings, loaded: bool) -> dict[str, Any]:
@@ -75,7 +81,12 @@ def health_body(settings: ServerSettings, loaded: bool) -> dict[str, Any]:
         "device": settings.device,
         "sokudan_version": sokudan.__version__,
         "calibrated": settings.calibrated,
-        "order_marginalize": settings.order_marginalize,
+        "calibration": {
+            "temperatures": dict(settings.temperatures or {}),
+            "note": "v0.2.1 default: bool temperatures only (the calibration.json beside "
+                    "the weights); score and choice are raw. --temperatures none serves "
+                    "raw probabilities.",
+        },
         "state_rendering": STATE_RENDERING,
         "noul_criteria": "rendered into the yes/no marker text as `はい: <true>` / "
                          "`いいえ: <false>`; effect on accuracy not measured",
@@ -99,10 +110,6 @@ def health_body(settings: ServerSettings, loaded: bool) -> dict[str, Any]:
 def create_app(agent: Any, settings: ServerSettings | None = None) -> FastAPI:
     """Build the app around an already-loaded agent (anything with `.predict`)."""
     settings = settings or ServerSettings()
-    if settings.order_marginalize:
-        raise NotImplementedError(
-            "order_marginalize is not implemented yet; start the server without it"
-        )
 
     import sokudan
 
@@ -114,8 +121,6 @@ def create_app(agent: Any, settings: ServerSettings | None = None) -> FastAPI:
     )
     semaphore = asyncio.Semaphore(settings.max_concurrency)
     inflight = {"n": 0}
-    extension = {"calibrated": settings.calibrated,
-                 "order_marginalize": settings.order_marginalize}
 
     @app.get("/health")
     async def health() -> JSONResponse:
@@ -161,6 +166,10 @@ def create_app(agent: Any, settings: ServerSettings | None = None) -> FastAPI:
         finally:
             inflight["n"] -= 1
 
+        # per response, from `Agent.predict` (v0.2.1); an agent without those fields
+        # falls back to whether the loaded model has any temperature
+        extension = {"calibrated": bool(result.get("calibrated", settings.calibrated)),
+                     "calibrated_answers": list(result.get("calibrated_answers", []))}
         body = wire.to_wire_response(request, result, model_name=MODEL_NAME,
                                      extension=extension)
         body["sokudan"]["latency_ms"] = round((time.perf_counter() - started) * 1000, 2)
@@ -169,13 +178,28 @@ def create_app(agent: Any, settings: ServerSettings | None = None) -> FastAPI:
     return app
 
 
+def temperatures_setting(value: str | None) -> dict[str, Any]:
+    """`load` keyword arguments for `--temperatures` / `SOKUDAN_TEMPERATURES`: unset is
+    `load`'s default (the shipped bool calibration), `none` / `off` is no calibration,
+    anything else is a temperatures file."""
+    if value is None:
+        value = os.environ.get("SOKUDAN_TEMPERATURES") or None
+    if value is None:
+        return {}
+    if value.strip().lower() in ("none", "off"):
+        return {"temperatures": None}
+    return {"temperatures": value}
+
+
 def load_agent(settings: ServerSettings, temperatures: str | None = None) -> Any:
     import sokudan
 
     agent = sokudan.load(settings.model_ref, device=settings.device,
-                         temperatures=temperatures)
+                         **temperatures_setting(temperatures))
     settings.device = agent.device
-    settings.calibrated = bool(temperatures)
+    temps = getattr(agent, "temperatures", None) or {}
+    settings.temperatures = {f"{kind}/{k}": float(t) for (kind, k), t in temps.items()}
+    settings.calibrated = bool(temps)
     return agent
 
 
@@ -197,18 +221,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", default=None,
                         help="cpu or cuda (default: cuda when available)")
     parser.add_argument("--temperatures", default=None,
-                        help="temperatures.json to calibrate probabilities; off by default "
-                             "because the shipped temperatures make score RPS worse")
+                        help="default: the bool calibration shipped beside the weights "
+                             "(score and choice stay raw); 'none' or 'off' for raw "
+                             "probabilities; or a temperatures file. Also read from "
+                             "SOKUDAN_TEMPERATURES")
     parser.add_argument("--max-concurrency", type=int, default=1)
     parser.add_argument("--max-queue", type=int, default=32)
-    parser.add_argument("--order-marginalize", action="store_true",
-                        help="average over option orders at inference time "
-                             "(not implemented yet; refused)")
     args = parser.parse_args(argv)
-
-    if args.order_marginalize:
-        print("sokudan serve: --order-marginalize is not implemented yet", flush=True)
-        return 2
 
     import uvicorn
 
