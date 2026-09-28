@@ -127,3 +127,23 @@ uvx twine upload dist\*; Remove-Item Env:TWINE_PASSWORD
 1. **Python 3.11 以外では `--ignore-requires-python` を付けて入れます。** sokudan 0.2.1 は `requires-python = ">=3.11,<3.12"` を宣言していて、そのままでは新しい Python（Colab）で `pip install sokudan` が通らないためです。3.12 で通ることは、上のローカルの実行で確かめました。宣言を広げるのは次の版の判断として残しています（0.2.1 は上げ直せない）。
 2. ローカルの実行は、パスの短い一時ディレクトリで行いました。作業用のディレクトリでは、torch の同梱ライセンスのパスが Windows の長さの上限を超え、pip が `WinError 206` で失敗したためです（ノートブックの問題ではない）。`jupyter` のランチャー exe はアプリケーション制御に止められたので、`python -m nbconvert` で実行しました。
 3. Colab の中の `curl` の応答はファイル（`resp.json`）に書き、Python で UTF-8 として読みます。Windows のローカル実行で、`!` の出力の文字コードに左右されないようにするためです。
+
+**HF のモデルカード**: `README.md` だけを main に上げました（`5f91a0d962b45df1794cfadff008a4da88a67a53`、親 `bb09c20`）。重みは `8750a833…` のままです。タグ `v0.2.1` は `bb09c20` のまま動かしていません（タグの時点のカードには PyPI の行がありません）。
+
+- 訂正（§5 の追記）: `list_repo_refs` の `942c80c…`（v0.2）と `ad117df…`（v0.2.1）は、注釈付きタグのオブジェクトの ID でした。`model_info(revision=…)` で解決すると、v0.2 → `6cfe939`、v0.2.1 → `bb09c20` です。
+
+**未認証の HTTP**（16:05:30、`curl -L`）: 次のすべてが 200 でした。
+
+| URL | バイト | 確認した内容 |
+|---|---|---|
+| `https://raw.githubusercontent.com/hiroki-abe-58/sokudan/main/README.md` | 9,101 | `pip install sokudan` の行、PyPI のバッジ、Colab のバッジの URL |
+| `https://raw.githubusercontent.com/hiroki-abe-58/sokudan/main/README_ja.md` | 24,093 | |
+| `https://raw.githubusercontent.com/hiroki-abe-58/sokudan/main/docs/serving.md` | 9,446 | `pip install "sokudan[serve]"` と開発版の行 |
+| `https://raw.githubusercontent.com/hiroki-abe-58/sokudan/main/CHANGELOG.md` | 10,138 | |
+| `https://github.com/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb` | 255,410 | |
+| `https://raw.githubusercontent.com/hiroki-abe-58/sokudan/main/notebooks/sokudan_quickstart.ipynb` | 8,826 | JSON として読め、セル 14（nbformat 4） |
+| `https://colab.research.google.com/github/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb` | 97,320 | Colab のアプリの枠。ノートブックが Colab で開けることまでは、この取得では確認していない |
+| `https://colab.research.google.com/assets/colab-badge.svg` | 2,369 | |
+| `https://img.shields.io/pypi/v/sokudan` | 1,275 | バッジの文字列に `v0.2.1` |
+| `https://pypi.org/project/sokudan/` | 3,038 | 本文は小さい（JS のページの可能性）。版は JSON API で確認済み |
+| `https://huggingface.co/GeneLab/sokudan-ja-310m/raw/main/README.md` | 20,151 | `pip install sokudan` と Colab のリンク |
