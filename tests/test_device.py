@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from sokudan.predict import resolve_device
+from sokudan.backends.torch_backend import resolve_device
 
 
 def _available(monkeypatch, *, cuda: bool, mps: bool) -> None:

@@ -11,6 +11,9 @@ beats inventing one from a specification we cannot check.
 
 What this does **not** share with that API is where the probabilities come from. They
 are the head's logits read directly, not a model's own report of its confidence.
+
+The forward pass itself runs in a backend (`sokudan.backends`); this module does not
+import torch.
 """
 
 from __future__ import annotations
@@ -21,8 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import torch
-
+from sokudan.backends import Backend, Batch
 from sokudan.encoding.question import QuestionEncoderCache, encode_joint
 from sokudan.schema.question import Question, is_ordered, parse_questions
 
@@ -35,7 +37,11 @@ class _Prepared:
 
 
 class Agent:
-    """A loaded checkpoint that answers typed questions about a state."""
+    """A loaded checkpoint that answers typed questions about a state.
+
+    `model` is a `Backend`, or a torch model, which runs on `device` through the torch
+    backend. `agent.backend` is the backend in use.
+    """
 
     def __init__(
         self,
@@ -47,15 +53,31 @@ class Agent:
         max_state_tokens: int = 1024,
         encoding: str = "separate",
     ) -> None:
-        self.model = model
+        if not isinstance(model, Backend):
+            from sokudan.backends.torch_backend import TorchBackend
+
+            model = TorchBackend(model, device, encoding=encoding)
+        self.backend = model
         self.tokenizer = tokenizer
-        self.device = device
         self.temperatures = temperatures or {}
         self.max_state_tokens = max_state_tokens
         self.cache = QuestionEncoderCache()
         self.encoding = encoding
         if encoding not in ("separate", "joint"):
             raise ValueError(f"unknown encoding {encoding!r}")
+
+    @property
+    def model(self) -> object:
+        """The backend's model (a torch module or an MLX module)."""
+        return self.backend.model
+
+    @property
+    def device(self) -> str:
+        return self.backend.device
+
+    @property
+    def dtype(self) -> str:
+        return self.backend.dtype
 
     @staticmethod
     def _state_text(state: str | dict[str, Any] | list[Any]) -> str:
@@ -76,7 +98,6 @@ class Agent:
             return "\n".join(parts)
         raise TypeError(f"unsupported state type {type(state).__name__}")
 
-    @torch.no_grad()
     def predict(
         self,
         state: str | dict[str, Any] | list[Any],
@@ -195,9 +216,9 @@ class Agent:
 
         order = list(prepared)
         n = len(order)
-        pad_id = self.tokenizer.pad_token_id
-        device = torch.device(self.device)
+        input_order = self.backend.input_order
 
+        encoded_state = None
         if self.encoding == "joint":
             # v0.1. The state is re-encoded per question, so there is nothing to
             # cache and latency grows with the number of questions
@@ -205,8 +226,7 @@ class Agent:
             encoded = [
                 encode_joint(prepared[qid].question, text, self.tokenizer,
                              max_tokens=self.max_state_tokens,
-                             input_order=getattr(self.model, "input_order",
-                                                 "question_first"))
+                             input_order=input_order)
                 for qid in order
             ]
             state_tokens = max((e.n_state_tokens for e in encoded), default=0)
@@ -220,75 +240,40 @@ class Agent:
             state_tokens = encoded_state.n_tokens
             truncated = encoded_state.truncated
 
-        sequence_len = max(len(e.input_ids) for e in encoded)
-        n_markers = max(e.n_markers for e in encoded)
-
-        input_ids = torch.full((n, sequence_len), pad_id, dtype=torch.long)
-        attention_mask = torch.zeros((n, sequence_len), dtype=torch.long)
-        marker_positions = torch.zeros((n, n_markers), dtype=torch.long)
-        marker_mask = torch.zeros((n, n_markers), dtype=torch.long)
-        ordered = torch.zeros(n, dtype=torch.bool)
-        sandwich = getattr(self.model, "input_order", "question_first") == "sandwich"
-        back = torch.zeros((n, n_markers), dtype=torch.long) if sandwich else None
-
-        for row, qid in enumerate(order):
-            item = encoded[row]
-            input_ids[row, : len(item.input_ids)] = torch.tensor(item.input_ids)
-            attention_mask[row, : len(item.input_ids)] = 1
-            positions = item.marker_positions
-            marker_positions[row, : len(positions)] = torch.tensor(positions)
-            marker_positions[row, len(positions):] = positions[0]
-            if back is not None:
-                back[row, : len(positions)] = torch.tensor(item.marker_positions_back)
-                back[row, len(positions):] = item.marker_positions_back[0]
-            marker_mask[row, : len(positions)] = 1
-            ordered[row] = is_ordered(prepared[qid].question)
-
+        batch = Batch.build(
+            encoded, [is_ordered(prepared[qid].question) for qid in order],
+            self.tokenizer.pad_token_id, sandwich=input_order == "sandwich",
+            state=encoded_state,
+        )
+        probs = self.backend.probs(batch)
+        question_tokens = int(batch.attention_mask.sum())
         if self.encoding == "joint":
-            extra = {} if back is None else {"marker_positions_back": back.to(device)}
-            out = self.model(
-                input_ids.to(device), attention_mask.to(device),
-                marker_positions.to(device), marker_mask.to(device), ordered.to(device),
-                **extra,
-            )
-            question_tokens = int(attention_mask.sum()) - state_tokens * n
-        else:
-            state_ids = torch.tensor(
-                [encoded_state.input_ids], dtype=torch.long).to(device)
-            state_mask = torch.tensor(
-                [encoded_state.attention_mask], dtype=torch.long).to(device)
-            out = self.model(
-                state_ids, state_mask,
-                input_ids.to(device), attention_mask.to(device),
-                marker_positions.to(device), marker_mask.to(device), ordered.to(device),
-            )
-            question_tokens = int(attention_mask.sum())
-        probs = out.probs.float().cpu().numpy()
+            question_tokens -= state_tokens * n
         rows = {qid: probs[row, :len(prepared[qid].labels)]
                 for row, qid in enumerate(order)}
         return rows, n, state_tokens, truncated, question_tokens
 
 
 
-def _resolve_checkpoint(checkpoint: str | Path) -> tuple[dict, Path | None]:
+def locate_checkpoint(checkpoint: str | Path) -> Path:
     """Accept a `.pt` file, a directory of safetensors, or a Hub repo id.
 
     The published weights are safetensors in a repository, and the training script
     writes a `.pt`. Both have to load through one entry point, or the Quickstart in
     the README describes something the package cannot do.
 
-    Returns the state blob and, when the checkpoint came from a directory or the Hub,
-    the directory it came from -- so a sibling `temperatures.json` can be found.
+    Returns the `.pt` file or the directory holding `model.safetensors` (downloaded
+    from the Hub if it was a repo id). Reading the weights is the backend's job.
     """
-    from pathlib import Path as _Path
-
-    path = _Path(str(checkpoint))
+    path = Path(str(checkpoint))
 
     if path.is_file():
-        return torch.load(str(path), map_location="cpu", weights_only=False), path.parent
+        return path
 
     if path.is_dir():
-        return _load_directory(path), path
+        if not (path / "model.safetensors").exists():
+            raise FileNotFoundError(f"{path} has no model.safetensors")
+        return path
 
     # Not on disk: treat it as `repo_id` or `repo_id@revision`.
     repo_id, _, revision = str(checkpoint).partition("@")
@@ -299,25 +284,11 @@ def _resolve_checkpoint(checkpoint: str | Path) -> tuple[dict, Path | None]:
         )
     from huggingface_hub import snapshot_download
 
-    local = _Path(snapshot_download(
+    local = Path(snapshot_download(
         repo_id, revision=revision or None,
         allow_patterns=["*.json", "*.safetensors", "tokenizer*"],
     ))
-    return _load_directory(local), local
-
-
-def _load_directory(directory: Path) -> dict:
-    """Read `model.safetensors` + `config.json` into the shape `torch.load` returns."""
-    from safetensors.torch import load_file
-
-    weights = directory / "model.safetensors"
-    config_path = directory / "config.json"
-    if not weights.exists():
-        raise FileNotFoundError(f"{directory} has no model.safetensors")
-    config = (
-        json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
-    )
-    return {"state_dict": load_file(str(weights)), "config": config}
+    return locate_checkpoint(local)
 
 
 def read_temperatures(path: str | Path) -> dict[tuple[str, int], float]:
@@ -370,17 +341,6 @@ def resolve_temperatures(
     return read_temperatures(path)
 
 
-def resolve_device(device: str | None = "auto") -> str:
-    """`"auto"` (or None): cuda, then mps, then cpu. Any other value is used as given."""
-    if device not in (None, "auto"):
-        return device
-    if torch.cuda.is_available():
-        return "cuda"
-    if torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
-
-
 def load(
     checkpoint: str | Path,
     *,
@@ -405,34 +365,10 @@ def load(
     """
     from transformers import AutoTokenizer
 
-    from sokudan.config import BACKBONE_MODEL_ID
-    from sokudan.model.sokudan import SokudanModel
+    from sokudan.backends.torch_backend import TorchBackend
 
-    device = resolve_device(device)
-    blob, resolved_dir = _resolve_checkpoint(checkpoint)
-    parsed = resolve_temperatures(temperatures, resolved_dir)
-    config = blob.get("config", {})
-    backbone_id = config.get("backbone", BACKBONE_MODEL_ID)
-    encoding = config.get("encoding", "separate")
-
-    # Absent in checkpoints that predate `--local-attention`; None keeps the
-    # pretrained window, which is what those were trained at.
-    local_attention = config.get("local_attention")
-
-    if encoding == "joint":
-        from sokudan.model.joint import SokudanJointModel
-
-        model = SokudanJointModel.from_pretrained_backbone(
-            backbone_id, local_attention=local_attention,
-            input_order=config.get("input_order", "question_first"),
-        )
-    else:
-        model = SokudanModel.from_pretrained_backbone(
-            backbone_id, n_head_layers=config.get("n_head_layers", 2),
-            local_attention=local_attention,
-        )
-    model.load_state_dict(blob["state_dict"])
-    model.to(device).eval()
-
-    return Agent(model, AutoTokenizer.from_pretrained(backbone_id),
-                 device=device, temperatures=parsed, encoding=encoding)
+    path = locate_checkpoint(checkpoint)
+    parsed = resolve_temperatures(temperatures, path.parent if path.is_file() else path)
+    backend = TorchBackend.load(path, device=device or "auto")
+    return Agent(backend, AutoTokenizer.from_pretrained(backend.backbone_id),
+                 temperatures=parsed, encoding=backend.encoding)
