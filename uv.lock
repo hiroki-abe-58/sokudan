@@ -777,6 +777,29 @@ wheels = [
 ]
 
 [[package]]
+name = "mlx"
+version = "0.32.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mlx-metal" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4e/3c/f56f5de7188b0b5855046244b1ebb6f2055cc298c9f7336b69cc2013ad23/mlx-0.32.2-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:238b50d2ee3917c836e73f9446011518b79ff094940eb0107fa6cd17d02a2eca", size = 625943, upload-time = "2026-08-25T10:31:33.737Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/77/a1f7b2ca95b5c5106eb00268a950e351deb3348cd5b5433861619d3b0de0/mlx-0.32.2-cp311-cp311-macosx_15_0_arm64.whl", hash = "sha256:e507dc67d268cf78254e17756f25057198fe74791508fcbd1e6d967673a8d374", size = 625943, upload-time = "2026-08-25T10:31:35.241Z" },
+    { url = "https://files.pythonhosted.org/packages/16/f9/15c5b7313a73c33014e8082992a868b95b742c1966a57b684b7a3cffe597/mlx-0.32.2-cp311-cp311-macosx_26_0_arm64.whl", hash = "sha256:e0828c96a6b988afbe6f07cc39adc0470eba9121f7e356623a8fb9d9a6397533", size = 625981, upload-time = "2026-08-25T10:31:36.631Z" },
+]
+
+[[package]]
+name = "mlx-metal"
+version = "0.32.2"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f7/ab/ba1952908c5d2a5070cf1cfbfea0161c4751ea62299e2776819810917483/mlx_metal-0.32.2-py3-none-macosx_14_0_arm64.whl", hash = "sha256:3825fff379dbc107dd3413e564a06caeaa24819910ec49c0439e454c06a1b9b8", size = 42516623, upload-time = "2026-08-25T10:31:18.396Z" },
+    { url = "https://files.pythonhosted.org/packages/79/ec/34f37376e26d537fadffb99af3a760d6545e37f5e1a30a552baadf237fc5/mlx_metal-0.32.2-py3-none-macosx_15_0_arm64.whl", hash = "sha256:55a369250d220b2cf10213a87a2ac1b1a420608c5b35b1df4e7147ac8e32f121", size = 42512323, upload-time = "2026-08-25T10:31:22.673Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/cd/4e50bf325100e7165e13d025f264362bf0009196269f9eaf87f2c6e738a2/mlx_metal-0.32.2-py3-none-macosx_26_0_arm64.whl", hash = "sha256:e6abeac9ac5265830c9c1541b6f96e9be37a85c2446763a46ad466c63a3837ab", size = 64367860, upload-time = "2026-08-25T10:31:28.056Z" },
+]
+
+[[package]]
 name = "mpmath"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1517,7 +1540,7 @@ wheels = [
 
 [[package]]
 name = "sokudan"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "datasets" },
@@ -1525,13 +1548,14 @@ dependencies = [
     { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "matplotlib" },
+    { name = "mlx", marker = "platform_machine == 'arm64' and platform_release >= '23' and sys_platform == 'darwin'" },
     { name = "numpy" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "rich" },
     { name = "safetensors" },
     { name = "tokenizers" },
-    { name = "torch" },
+    { name = "torch", marker = "platform_machine != 'arm64' or platform_release < '23' or sys_platform != 'darwin'" },
     { name = "tqdm" },
     { name = "transformers" },
     { name = "unidic-lite" },
@@ -1551,9 +1575,15 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
+mlx = [
+    { name = "mlx", marker = "platform_machine == 'arm64' and platform_release >= '23' and sys_platform == 'darwin'" },
+]
 serve = [
     { name = "fastapi" },
     { name = "uvicorn", extra = ["standard"] },
+]
+torch = [
+    { name = "torch" },
 ]
 
 [package.metadata]
@@ -1566,6 +1596,8 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.24,<2" },
     { name = "laya", marker = "extra == 'bench'", specifier = ">=0.1" },
     { name = "matplotlib", specifier = ">=3.8,<4" },
+    { name = "mlx", marker = "platform_machine == 'arm64' and platform_release >= '23' and sys_platform == 'darwin'", specifier = ">=0.32.2,<0.33" },
+    { name = "mlx", marker = "platform_machine == 'arm64' and platform_release >= '23' and sys_platform == 'darwin' and extra == 'mlx'", specifier = ">=0.32.2,<0.33" },
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "pydantic", specifier = ">=2.7,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -1577,13 +1609,14 @@ requires-dist = [
     { name = "safetensors", specifier = ">=0.4,<1" },
     { name = "scikit-learn", marker = "extra == 'bench'", specifier = ">=1.5" },
     { name = "tokenizers", specifier = ">=0.21,<1" },
-    { name = "torch", specifier = ">=2.8,<3", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "torch", marker = "platform_machine != 'arm64' or platform_release < '23' or sys_platform != 'darwin'", specifier = ">=2.8,<3", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "torch", marker = "extra == 'torch'", specifier = ">=2.8,<3", index = "https://download.pytorch.org/whl/cu128" },
     { name = "tqdm", specifier = ">=4.66,<5" },
     { name = "transformers", specifier = ">=4.48.0,<6" },
     { name = "unidic-lite", specifier = ">=1.0.8,<2" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'serve'", specifier = ">=0.30,<1" },
 ]
-provides-extras = ["dev", "serve", "demo", "bench"]
+provides-extras = ["dev", "serve", "torch", "mlx", "demo", "bench"]
 
 [[package]]
 name = "starlette"
