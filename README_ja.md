@@ -372,6 +372,9 @@ uv run pytest
 uv run ruff check .
 ```
 
+- v0.3.0 から、データ生成・学習・評価だけが使う依存（`datasets`、`fugashi`、`unidic-lite`、`matplotlib`）は extra `train` にあります。`dev` extra は `sokudan[train]` を含むので、`uv sync --extra dev` で従来どおり入ります。`dev` を使わずにスクリプトだけ動かすときは `uv sync --extra train`（pip なら `pip install "sokudan[train]"`）です。
+- Apple Silicon（macOS 14 以降）では基本の依存に torch が入りません。torch を使うテストや学習には `--extra torch` も付けてください。
+
 再現手順（`bench_ja` の生成からベースライン実測まで）は
 [`docs/baseline_ja.md`](docs/baseline_ja.md) の冒頭にあります。
 

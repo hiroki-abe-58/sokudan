@@ -113,6 +113,6 @@ Guide: [`docs/serving.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/do
 
 - [README_ja.md](https://github.com/hiroki-abe-58/sokudan/blob/main/README_ja.md): the Japanese README, with the design notes (joint encoding, the dynamic-K cumulative link) and every limit.
 - [`docs/architecture.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/architecture.md), [`docs/baseline_ja.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/baseline_ja.md), [`docs/baseline_lev.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/baseline_lev.md) (against lev on the same machine and harness), [`CHANGELOG.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/CHANGELOG.md).
-- Development: `uv sync --extra dev`, `uv run pytest`, `uv run ruff check .`
+- Development: `uv sync --extra dev`, `uv run pytest`, `uv run ruff check .`. From v0.3.0 the dependencies only data building, training and evaluation use (`datasets`, `fugashi`, `unidic-lite`, `matplotlib`) are in the `train` extra; `dev` includes `sokudan[train]`, so `uv sync --extra dev` still installs them (`uv sync --extra train` / `pip install "sokudan[train]"` without the dev tools). On Apple silicon with macOS 14+, add `--extra torch` for the tests and training that need torch.
 
 Apache-2.0. The backbone `sbintuitions/modernbert-ja-310m` is MIT (see `NOTICE`).
