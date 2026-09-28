@@ -88,6 +88,12 @@ def main() -> int:
                         help="evaluate a trained sokudan checkpoint alongside the baselines")
     parser.add_argument("--sokudan-temperatures", default=None,
                         help="temperatures.json from scripts/calibrate.py (Stage 2)")
+    parser.add_argument("--sokudan-backend", default="torch", choices=["torch", "mlx"],
+                        help="sokudan.load backend for the sokudan rows (default torch)")
+    parser.add_argument("--sokudan-device", default="cuda",
+                        help="torch device for the sokudan rows (default cuda; 'auto' for mlx)")
+    parser.add_argument("--sokudan-dtype", default=None,
+                        help="sokudan.load dtype (default: the backend's default)")
     args = parser.parse_args()
 
     items = load_bench(Path(args.bench))
@@ -116,7 +122,9 @@ def main() -> int:
 
         # Uncalibrated first, then the Stage 2 temperatures, so the effect of
         # calibration on the *same* checkpoint is visible rather than bundled in.
-        baselines.append(SokudanBaseline(args.sokudan_checkpoint, "sokudan-ja-310m"))
+        where = {"backend": args.sokudan_backend, "device": args.sokudan_device,
+                 "dtype": args.sokudan_dtype}
+        baselines.append(SokudanBaseline(args.sokudan_checkpoint, "sokudan-ja-310m", **where))
         if args.sokudan_temperatures:
             blob = json.loads(Path(args.sokudan_temperatures).read_text(encoding="utf-8"))
             parsed = {}
@@ -125,7 +133,7 @@ def main() -> int:
                 parsed[(kind, int(count))] = float(value)
             baselines.append(SokudanBaseline(
                 args.sokudan_checkpoint, "sokudan-ja-310m + 温度較正",
-                temperatures=parsed,
+                temperatures=parsed, **where,
             ))
 
     rows: list[dict[str, Any]] = []
@@ -193,6 +201,20 @@ def main() -> int:
         gold=gold["choice"],
         **{f"p{i}": v for i, v in enumerate(choice_probs_by_name.values())},
         names=np.array(list(choice_probs_by_name), dtype=object),
+    )
+
+    # Every row's per-item probabilities (choice, score, bool), keyed by position in
+    # `names`, so two runs can be compared item by item.
+    per_item: dict[str, np.ndarray] = {}
+    for i, output in enumerate(outputs):
+        per_item[f"choice{i}"] = output.choice_probs
+        per_item[f"score{i}"] = output.score_probs
+        per_item[f"bool{i}"] = output.bool_p_true
+    np.savez_compressed(
+        out_dir / "item_probs.npz",
+        item_ids=np.array([item.item_id for item in items]),
+        names=np.array([output.name for output in outputs]),
+        **per_item,
     )
 
     png = save_reliability_diagram(
