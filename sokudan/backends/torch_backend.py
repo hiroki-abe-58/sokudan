@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +23,28 @@ def resolve_device(device: str | None = "auto") -> str:
     if torch.backends.mps.is_available():
         return "mps"
     return "cpu"
+
+
+@contextlib.contextmanager
+def quiet_transformers() -> Iterator[None]:
+    """transformers' log level at ERROR for the duration, then restored.
+
+    `TorchBackend.load` builds the model from the pretrained backbone, and transformers'
+    load report (warning level) lists that checkpoint's masked-LM head (`head.*`,
+    `decoder.bias`) as UNEXPECTED, because `AutoModel` builds the bare encoder. Every
+    weight is then overwritten by a strict `load_state_dict` of the trained checkpoint,
+    which raises on any missing or unexpected key, so the report says nothing a user can
+    act on. Training builds the backbone outside this and keeps the report. Errors are
+    unaffected: transformers raises them, it does not log them.
+    """
+    from transformers.utils import logging as hf_logging
+
+    before = hf_logging.get_verbosity()
+    hf_logging.set_verbosity_error()
+    try:
+        yield
+    finally:
+        hf_logging.set_verbosity(before)
 
 
 def read_checkpoint(path: Path) -> dict:
@@ -65,18 +89,22 @@ class TorchBackend(Backend):
         # pretrained window, which is what those were trained at.
         local_attention = config.get("local_attention")
 
-        if encoding == "joint":
-            from sokudan.model.joint import SokudanJointModel
+        with quiet_transformers():
+            if encoding == "joint":
+                from sokudan.model.joint import SokudanJointModel
 
-            model = SokudanJointModel.from_pretrained_backbone(
-                backbone_id, local_attention=local_attention,
-                input_order=config.get("input_order", "question_first"),
-            )
-        else:
-            model = SokudanModel.from_pretrained_backbone(
-                backbone_id, n_head_layers=config.get("n_head_layers", 2),
-                local_attention=local_attention,
-            )
+                model = SokudanJointModel.from_pretrained_backbone(
+                    backbone_id, local_attention=local_attention,
+                    input_order=config.get("input_order", "question_first"),
+                )
+            else:
+                model = SokudanModel.from_pretrained_backbone(
+                    backbone_id, n_head_layers=config.get("n_head_layers", 2),
+                    local_attention=local_attention,
+                )
+        # strict: every backbone and head weight comes from the checkpoint, so the
+        # pretrained masked-LM head the silenced report would have listed cannot leak
+        # in, and a missing key raises here
         model.load_state_dict(blob["state_dict"])
         model.to(device).eval()
         return cls(model, device, encoding=encoding, backbone_id=backbone_id)
