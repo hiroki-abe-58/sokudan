@@ -1,0 +1,8 @@
+# CPU-only torch: a free CPU Space has no GPU, and the CPU wheels are a fraction of
+# the CUDA ones. Listed first so pip resolves torch from this index.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.8
+# The package itself, pinned to the v0.2 tag of the public repository. Brings
+# transformers, safetensors (via transformers) and huggingface_hub with it.
+sokudan @ git+https://github.com/hiroki-abe-58/sokudan.git@v0.2
+gradio>=6.0,<7

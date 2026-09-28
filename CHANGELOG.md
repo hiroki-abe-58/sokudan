@@ -2,6 +2,17 @@
 
 数値はすべて本機で実行したコードの出力です。未測定のものは「測定していない」と書きます。
 
+## 未公開（ブランチ `feat/systemone-server`）
+
+モデルの重みは変えていません。
+
+- `sokudan serve`: `/v1/systemone` 互換のサーバー（`sokudan/serve/systemone.py`、`sokudan/serve/wire.py`）。TypeSafe の公開 API リファレンスの形で受けて返します。手順は `docs/serving.md`、各フィールドの扱いは `docs/systemone_wire_format.md`。
+  - noul の答えの `type` は `"noul"`、`confidence` はワイヤ形式の定義（choice は `(p_max − 1/K)/(1 − 1/K)`）。どちらも `Agent.predict` の返り値（`"bool"`、最大確率）とは違います。`predict` は変えていません。
+  - 推論時の順序平均（`--order-marginalize`）は未実装で、指定すると起動を拒否します。
+- README: `README.md` を英語に、日本語は `README_ja.md` に（`docs/readme_rewrite_notes.md`）。
+- `spaces/demo/`: v0.2 用の Gradio デモ（CPU）。state を文字列で渡します。
+- `pyproject.toml`: 依存の上限、`huggingface-hub` と `safetensors` の明記、extras `demo`、sdist の対象の絞り込み（`docs/release_pypi.md`）。
+
 ## v0.2 — 2026-09-27（モデル）/ パッケージ 0.2.0
 
 ### モデル（Hugging Face `GeneLab/sokudan-ja-310m` の `main`）
