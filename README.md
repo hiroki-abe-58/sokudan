@@ -33,6 +33,7 @@ What `pip install sokudan` brings depends on the platform (v0.3.0):
 | Linux, Windows, Intel Mac, Apple silicon on macOS 13 | torch | torch: cuda, then mps, then cpu |
 
 - `pip install "sokudan[torch]"` adds torch on any platform (for `backend="torch"` on Apple silicon, and for the training and evaluation scripts).
+- To use a GPU on Windows / Linux, install a CUDA build of torch first (for example `pip install torch --index-url https://download.pytorch.org/whl/cu128`), then install sokudan.
 - `pip install "sokudan[mlx]"` names MLX explicitly (same platforms as above). `pip install "sokudan[serve]"` adds the server.
 
 ```python

@@ -119,6 +119,7 @@ pip install sokudan
 | Linux、Windows、Intel Mac、macOS 13 の Apple Silicon | torch | torch（cuda → mps → cpu） |
 
 - `pip install "sokudan[torch]"` は、どのプラットフォームでも torch を足します（Apple Silicon で `backend="torch"` を使うとき、学習・評価のスクリプトを動かすとき）。
+- Windows / Linux で GPU を使う場合は、先に CUDA 版の torch（例: `pip install torch --index-url https://download.pytorch.org/whl/cu128`）を入れてから sokudan を入れてください。
 - `pip install "sokudan[mlx]"` は MLX を明示する extra です（入るプラットフォームは上と同じ）。`pip install "sokudan[serve]"` はサーバーを足します。
 
 ### バックエンドと dtype（v0.3.0）
