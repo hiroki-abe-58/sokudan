@@ -503,23 +503,68 @@ def test_load_agent_reports_what_was_actually_loaded(monkeypatch):
     import sokudan
     from sokudan.serve.systemone import load_agent
 
-    class Loaded:
-        device = "cpu"
-        temperatures = {("bool", 2): 2.07}
-
     seen = {}
 
     def fake_load(ref, **kwargs):
         seen.update(kwargs)
-        return Loaded()
+        return _Loaded()
 
     monkeypatch.delenv("SOKUDAN_TEMPERATURES", raising=False)
     monkeypatch.setattr(sokudan, "load", fake_load)
     settings = ServerSettings(model_ref="test/fake")
     load_agent(settings)
     assert "temperatures" not in seen          # load()'s own default
+    assert (seen["backend"], seen["dtype"]) == ("auto", None)
+    assert (settings.backend, settings.device, settings.dtype) == ("mlx", "gpu", "float16")
     assert settings.calibrated is True
     assert health_body(settings, loaded=True)["calibration"]["temperatures"] == {"bool/2": 2.07}
+
+
+class _Loaded:
+    """What `sokudan.load` returns, as far as the server reads it."""
+
+    class backend:  # noqa: N801 - stands in for the Backend object's `.name`
+        name = "mlx"
+
+    device = "gpu"
+    dtype = "float16"
+    temperatures = {("bool", 2): 2.07}
+
+
+@pytest.mark.parametrize(("argv", "expected"), [
+    ([], ("auto", "auto", None)),
+    (["--backend", "torch", "--device", "mps"], ("torch", "mps", None)),
+    (["--backend", "mlx", "--dtype", "float32"], ("mlx", "auto", "float32")),
+])
+def test_serve_passes_backend_and_dtype_and_logs_the_choice(monkeypatch, capsys, argv,
+                                                            expected):
+    import sys
+    import types
+
+    import sokudan
+    from sokudan.serve.systemone import main
+
+    seen = {}
+
+    def fake_load(ref, **kwargs):
+        seen.update(kwargs)
+        return _Loaded()
+
+    monkeypatch.delenv("SOKUDAN_TEMPERATURES", raising=False)
+    monkeypatch.setattr(sokudan, "load", fake_load)
+    monkeypatch.setitem(sys.modules, "uvicorn",
+                        types.SimpleNamespace(run=lambda app, host, port: None))
+    assert main(argv) == 0
+    assert (seen["backend"], seen["device"], seen["dtype"]) == expected
+    assert "backend=mlx device=gpu dtype=float16" in capsys.readouterr().out
+
+
+def test_serve_rejects_an_unknown_backend():
+    from sokudan.serve.systemone import main
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--backend", "jax"])
+    assert exit_info.value.code == 2
 
 
 def test_cli_serve_help_names_the_default_model(capsys):

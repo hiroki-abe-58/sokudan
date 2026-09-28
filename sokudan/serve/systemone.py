@@ -62,6 +62,10 @@ STATE_RENDERING = {
 class ServerSettings:
     model_ref: str = DEFAULT_MODEL_REF
     device: str | None = None
+    # what was asked for before loading (dtype None: the backend's default), what was
+    # chosen after
+    backend: str = "auto"
+    dtype: str | None = None
     calibrated: bool = False
     max_state_chars: int = 100_000
     # 1 by default: the question-encoding cache inside `Agent` is a plain dict.
@@ -194,9 +198,12 @@ def temperatures_setting(value: str | None) -> dict[str, Any]:
 def load_agent(settings: ServerSettings, temperatures: str | None = None) -> Any:
     import sokudan
 
-    agent = sokudan.load(settings.model_ref, device=settings.device,
+    agent = sokudan.load(settings.model_ref, backend=settings.backend,
+                         device=settings.device, dtype=settings.dtype,
                          **temperatures_setting(temperatures))
+    settings.backend = agent.backend.name
     settings.device = agent.device
+    settings.dtype = agent.dtype
     temps = getattr(agent, "temperatures", None) or {}
     settings.temperatures = {f"{kind}/{k}": float(t) for (kind, k), t in temps.items()}
     settings.calibrated = bool(temps)
@@ -219,10 +226,14 @@ def main(argv: list[str] | None = None) -> int:
                              "model.safetensors, or a model.pt "
                              f"(default {DEFAULT_MODEL_REF}, i.e. the Hub main: v0.2 "
                              "weights plus the v0.2.1 calibration.json)")
+    parser.add_argument("--backend", default="auto", choices=["auto", "mlx", "torch"],
+                        help="auto (the default: MLX on Apple silicon when mlx is "
+                             "installed, else torch on mps, cuda or cpu), mlx or torch")
     parser.add_argument("--device", default="auto",
-                        help="auto (the default: MLX on Apple silicon when sokudan[mlx] is "
-                             "installed, else torch on mps, cuda or cpu), or a torch "
-                             "device: cpu, cuda or mps")
+                        help="auto (the default), or a torch device: cpu, cuda or mps")
+    parser.add_argument("--dtype", default=None,
+                        help="the backend's default when omitted (MLX float16, torch "
+                             "float32); MLX also takes float32")
     parser.add_argument("--temperatures", default=None,
                         help="default: the bool calibration shipped beside the weights "
                              "(score and choice stay raw); 'none' or 'off' for raw "
@@ -235,11 +246,12 @@ def main(argv: list[str] | None = None) -> int:
     import uvicorn
 
     settings = ServerSettings(model_ref=args.model, device=args.device,
+                              backend=args.backend, dtype=args.dtype,
                               max_concurrency=args.max_concurrency,
                               max_queue=args.max_queue)
     print(f"sokudan serve: loading {args.model} ...", flush=True)
     agent = load_agent(settings, temperatures=args.temperatures)
-    print(f"sokudan serve: loaded on {settings.device}; "
-          f"calibrated={settings.calibrated}", flush=True)
+    print(f"sokudan serve: loaded; backend={settings.backend} device={settings.device} "
+          f"dtype={settings.dtype} calibrated={settings.calibrated}", flush=True)
     uvicorn.run(create_app(agent, settings), host=args.host, port=args.port)
     return 0
