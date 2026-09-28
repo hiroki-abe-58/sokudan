@@ -397,10 +397,8 @@ def _candidates(backend: str, device: str | None) -> Iterator[tuple[str, str]]:
 
 def _load_backend(name: str, path: Path, device: str, dtype: str | None) -> Backend:
     if name == "mlx":
-        from sokudan.backends.mlx import DTYPES, MLXBackend
+        from sokudan.backends.mlx import MLXBackend
 
-        if dtype is not None and dtype not in DTYPES:
-            raise ValueError(f"the MLX backend's dtype is one of {DTYPES}, got {dtype!r}")
         return MLXBackend.load(path, dtype=dtype)
     from sokudan.backends.torch_backend import TorchBackend
 
@@ -444,8 +442,8 @@ def load(
             mps, then cpu. `"cpu"`, `"cuda"`, `"mps"` (or any torch device string) are
             torch devices and are used as given, with `backend="auto"` too.
         dtype: `None` is the backend's default. torch: `"float32"` only. MLX:
-            `sokudan.backends.mlx.DTYPES` (the backbone's precision; the heads run in
-            float32).
+            `"float16"` (the default) or `"float32"`, the backbone's precision; the heads
+            run in float32 (docs/mlx.md).
         temperatures: by default (v0.2.1) the `calibration.json` shipped beside the
             checkpoint, **bool temperatures only** -- score and choice stay raw
             (docs/calibration.md §10). `None` turns calibration off (the raw head

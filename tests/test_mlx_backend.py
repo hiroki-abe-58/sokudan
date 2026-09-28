@@ -114,14 +114,28 @@ def _same_shape(a, b, path="") -> None:
         assert a == b, path
 
 
-@pytest.fixture(scope="module")
-def mlx_agent():
+def _load(**options):
     import sokudan
 
     try:
-        return sokudan.load(FIXTURE["predict"]["model"], backend="mlx")
+        return sokudan.load(FIXTURE["predict"]["model"], backend="mlx", **options)
     except Exception as exc:  # pragma: no cover - depends on the local cache / network
         pytest.skip(f"model unavailable: {type(exc).__name__}: {exc}")
+
+
+def _raw(agent, questions, state):
+    from sokudan.predict import _Prepared
+    from sokudan.schema.question import parse_questions
+
+    prepared = {qid: _Prepared(q, q.type, list(q.labels))
+                for qid, q in parse_questions(questions).items()}
+    return agent._forward(state, prepared)[0]
+
+
+@pytest.fixture(scope="module")
+def mlx_agent():
+    """float32: the precision the correctness gate compares with torch."""
+    return _load(dtype="float32")
 
 
 @pytest.mark.slow
@@ -134,14 +148,30 @@ def test_predict_answers_in_the_torch_shape(mlx_agent):
 
 @pytest.mark.slow
 def test_raw_probabilities_match_torch_cpu(mlx_agent):
-    from sokudan.predict import _Prepared
-    from sokudan.schema.question import parse_questions
-
     recorded = FIXTURE["predict"]
-    prepared = {qid: _Prepared(q, q.type, list(q.labels))
-                for qid, q in parse_questions(recorded["questions"]).items()}
     for state, expected in zip(recorded["states"], recorded["raw"], strict=True):
-        rows = mlx_agent._forward(state, prepared)[0]
+        rows = _raw(mlx_agent, recorded["questions"], state)
         for qid, probs in expected.items():
             assert int(np.argmax(rows[qid])) == int(np.argmax(probs))
             np.testing.assert_allclose(rows[qid], probs, atol=1e-3)
+
+
+@pytest.mark.slow
+def test_the_default_is_float16_within_the_dtype_gate():
+    agent = _load()
+    assert (agent.backend.name, agent.dtype) == ("mlx", "float16")
+    recorded = FIXTURE["predict"]
+    for state, expected in zip(recorded["states"], recorded["raw"], strict=True):
+        rows = _raw(agent, recorded["questions"], state)
+        for qid, probs in expected.items():
+            assert int(np.argmax(rows[qid])) == int(np.argmax(probs))
+            np.testing.assert_allclose(rows[qid], probs, atol=5e-2)
+
+
+def test_quantized_and_unknown_dtypes_are_refused(tmp_path):
+    from sokudan.backends.mlx import MLXBackend
+
+    (tmp_path / "model.safetensors").write_bytes(b"")
+    for dtype in ("8bit", "4bit", "bfloat16"):
+        with pytest.raises(ValueError, match="dtype"):
+            MLXBackend.load(tmp_path, dtype=dtype)

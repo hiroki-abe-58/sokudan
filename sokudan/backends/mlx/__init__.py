@@ -1,8 +1,12 @@
 """The MLX backend: the joint model on Apple silicon, without torch.
 
 Reads a safetensors checkpoint directory (the Hub layout); a `.pt` file and the separate
-encoding need the torch backend. `dtype` casts or quantizes the backbone only; the heads
-stay float32 (`sokudan.backends.mlx.model`).
+encoding need the torch backend. `dtype` casts the backbone only; the heads stay float32
+(`sokudan.backends.mlx.model`).
+
+float16 is the default because it met the agreement gate against torch cpu float32 on
+the 630-question parity set (docs/mlx.md). 8-bit and 4-bit quantized backbones did not,
+so they are not offered.
 """
 
 from __future__ import annotations
@@ -10,7 +14,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import mlx.core as mx
-import mlx.nn as nn
 import numpy as np
 
 from sokudan.backends import Backend, Batch, checkpoint_config
@@ -18,26 +21,10 @@ from sokudan.backends.mlx.model import JointModel, convert_weights
 from sokudan.backends.mlx.modernbert import EncoderConfig
 from sokudan.config import BACKBONE_MODEL_ID
 
-QUANTIZED = {"8bit-g64": (8, 64), "8bit-g32": (8, 32), "4bit-g64": (4, 64),
-             "4bit-g32": (4, 32)}
-"""Quantized backbones: `nn.quantize(bits, group_size)` over a float16 backbone."""
+DTYPES = {"float32": mx.float32, "float16": mx.float16}
+"""The backbone precisions `load` accepts."""
 
-VARIANTS = ("float32", "float16", *QUANTIZED)
-"""Every backbone precision this module can build."""
-
-DTYPES = ("float32",)
-"""The ones `sokudan.load(backend="mlx", dtype=...)` accepts."""
-
-DEFAULT_DTYPE = "float32"
-
-
-def _set_precision(backbone: nn.Module, dtype: str) -> None:
-    if dtype == "float32":
-        return
-    backbone.set_dtype(mx.float16)
-    if dtype in QUANTIZED:
-        bits, group_size = QUANTIZED[dtype]
-        nn.quantize(backbone, group_size=group_size, bits=bits)
+DEFAULT_DTYPE = "float16"
 
 
 class MLXBackend(Backend):
@@ -54,10 +41,11 @@ class MLXBackend(Backend):
 
     @classmethod
     def load(cls, path: Path, *, dtype: str | None = None) -> MLXBackend:
-        """Build the joint model from a checkpoint directory; `dtype` from `VARIANTS`."""
+        """Build the joint model from a checkpoint directory; `dtype` from `DTYPES`."""
         dtype = dtype or DEFAULT_DTYPE
-        if dtype not in VARIANTS:
-            raise ValueError(f"unknown MLX dtype {dtype!r}; known: {VARIANTS}")
+        if dtype not in DTYPES:
+            raise ValueError(f"the MLX backend's dtype is one of {tuple(DTYPES)}, "
+                             f"got {dtype!r}")
         if path.is_file():
             raise ValueError(f"{path} is a torch checkpoint; the MLX backend reads a "
                              "directory with model.safetensors")
@@ -77,7 +65,7 @@ class MLXBackend(Backend):
         model = JointModel(EncoderConfig.from_dict(encoder))
         weights = convert_weights(mx.load(str(path / "model.safetensors")))
         model.load_weights(list(weights.items()), strict=True)
-        _set_precision(model.backbone, dtype)
+        model.backbone.set_dtype(DTYPES[dtype])
         model.eval()
         mx.eval(model.parameters())
         return cls(model, dtype=dtype, backbone_id=backbone_id,
