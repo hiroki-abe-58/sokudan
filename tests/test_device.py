@@ -48,11 +48,12 @@ def test_auto_picks_mps_on_apple_silicon():
 def test_load_places_the_model_on_the_resolved_device():
     import sokudan
 
+    # backend="torch": with mlx installed, backend="auto" chooses MLX before any torch device
     try:
-        auto = sokudan.load("GeneLab/sokudan-ja-310m")
+        auto = sokudan.load("GeneLab/sokudan-ja-310m", backend="torch")
     except Exception as exc:  # pragma: no cover - depends on the local cache / network
         pytest.skip(f"model unavailable: {type(exc).__name__}: {exc}")
-    assert auto.device == "mps"
+    assert auto.backend.name == "torch" and auto.device == "mps"
     assert next(auto.model.parameters()).device.type == "mps"
     cpu = sokudan.load("GeneLab/sokudan-ja-310m", device="cpu")
     assert cpu.device == "cpu"
