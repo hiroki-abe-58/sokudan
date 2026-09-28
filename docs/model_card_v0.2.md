@@ -24,6 +24,7 @@ base_model: sbintuitions/modernbert-ja-310m
 > アーキテクチャ、学習データ、推論コードは v0.1 と同じで、推論のコストも 1 本分のままです。
 > `bench_ja` は、事前に commit したリリース規則のもとで 1 回だけ測り、規則を満たしました。
 > **v0.2.1 は、重みは v0.2 と同じで、`bool` の温度較正を既定で on にしたものです**（score と choice は較正しません。下の「較正」を参照）。
+> **パッケージ 0.3.0 は、重みは v0.2 のまま（変更なし）、Apple Silicon（macOS 14 以降）で MLX でも動かせるようにし、Python 3.11〜3.13 に対応したものです**（下の「MLX（Apple Silicon）」を参照）。
 > **この文書の数値は、すべて本機で実行したコードの出力です。** 未測定のものは「測定していない」と書きます。
 
 **v0.1 を使い続ける場合**は、revision `v0.1` を指定してください（v0.1 のときの `main` と同じ重みです）:
@@ -37,13 +38,15 @@ agent = sokudan.load("GeneLab/sokudan-ja-310m@v0.1")          # v0.1
 
 - バックボーン: [`sbintuitions/modernbert-ja-310m`](https://huggingface.co/sbintuitions/modernbert-ja-310m)（MIT）
 - 総パラメータ: 314,614,274（backbone 314,611,968 + scorer 768 + ordinal head 1,538。v0.1 と同じ）
-- ライセンス: Apache-2.0
+- ライセンス: Apache-2.0（モデルとコード）。評価データ `bench_ja` / `bench_en` は CC BY 4.0（下の「`bench_ja` / `bench_en` のライセンスと使い方」）
 - コード: https://github.com/hiroki-abe-58/sokudan
 
 ## 使い方
 
 ```bash
 pip install sokudan                 # PyPI: https://pypi.org/project/sokudan/
+                                    # Python 3.11〜3.13。Apple Silicon（macOS 14 以降）では MLX が入り torch は入らない。それ以外は torch
+pip install "sokudan[torch]"        # どのプラットフォームでも torch を足す（Apple Silicon で backend="torch" を使うとき）
 pip install "sokudan[serve]"        # /v1/systemone 互換サーバー（sokudan serve）も使うとき
 ```
 
@@ -76,6 +79,33 @@ result = agent.predict(
 > - dict（例: `{"body": ...}`）で渡すと、`key: value` の行に整形されます（`body: 先月の請求で…`）。
 > - これは学習と評価で使った入力（本文そのまま）と違う入力で、出力が変わります。
 > - held-out の 1 事例では、P(true) が 0.318（文字列）から 0.145（`{"body": ...}`）に動きました（1 事例の観測で、系統的には測っていません）。
+
+### MLX（Apple Silicon）
+
+パッケージ 0.3.0 から、Apple Silicon では同じ重みを MLX で動かせます（重みの変換は不要。`model.safetensors` をそのまま読みます）。
+
+```python
+import sokudan
+
+agent = sokudan.load("GeneLab/sokudan-ja-310m")                     # backend="auto": Apple Silicon なら MLX（float16）
+agent = sokudan.load("GeneLab/sokudan-ja-310m", backend="mlx", dtype="float32")
+agent = sokudan.load("GeneLab/sokudan-ja-310m", backend="torch")    # 要 pip install "sokudan[torch]"
+print(agent.backend)
+```
+
+- `backend="auto"` は MLX → torch の mps → cuda → cpu の順に試し、各候補で短いリクエストを 1 回答えさせてから使います。失敗すると warning を出して次に進みます。
+- MLX の既定は float16（ヘッドは float32）。8bit / 4bit の量子化は torch との一致の基準を満たさなかったので、選べません。
+- `bench_ja`（構成ごとに 1 回、較正前）:
+
+| | choice acc | score RPS↓ | bool acc | bool AUROC |
+|---|---|---|---|---|
+| torch cpu float32 | 0.880 | 0.0745 | 0.780 | 0.8439 |
+| MLX float32 | 0.880 | 0.0745 | 0.780 | 0.8439 |
+| MLX float16 | 0.880 | 0.0745 | 0.780 | 0.8445 |
+
+  - どの問題でも、予測（argmax、bool の 0.5 のどちら側か）は torch と同じでした。
+- 速度（M1 Max、他プロセスの負荷の下、`predict` 1 回の中央値）: Quickstart の state・1 問で MLX float16 10.2〜10.4 ms、torch mps 20.2〜20.6 ms、torch cpu 85.2〜88.7 ms。
+- 詳細: https://github.com/hiroki-abe-58/sokudan/blob/main/docs/mlx_ja.md
 
 ## 評価結果
 
@@ -196,6 +226,7 @@ v0.1 と同じ設定の 16 本（seed 0〜15。2026-09-21〜27 に学習）の�
 | choice の全順列の第 1 スロット率 | 0.289 | 0.317 | 1/3 |
 
   - score の対照には、ordinal の分布の形（端と中央のスロットの差）も入ります。
+- 包括的な選択肢（「その他」）は、先頭と最後の位置で選ばれにくくなります。ふつうの選択肢は、`bench_ja` の部署ルーティングの全 24 順序で、スロットごとの選択率が 0.243〜0.256 とほぼ一様でした。
 
 #### 試した対策と結果（3 系統とも採用していません）
 
@@ -207,6 +238,25 @@ v0.1 と同じ設定の 16 本（seed 0〜15。2026-09-21〜27 に学習）の�
 
 - 括弧は、対応のあるブートストラップの 95% 信頼区間です（順序平均）。
 - **推論時・学習時・データ側の 3 系統とも、位置感度は一部の検査で下がりました。しかし held-out の精度（M1m、M5）の非劣化を示せず、どれも見送りました。**
+
+### 包括的な選択肢（「その他」）
+
+- **argmax では、正解でもほとんど選ばれません。**
+  - `bench_ja` の部署ルーティングで、「その他」が正解の 38 件のうち、その他が選ばれたのは 11 件（recall 0.289）です。`bench_en` は 17/48（0.354）です。
+  - 取りこぼしは、主に「技術」（16 件）と「営業」（10 件）に入ります。その他と答えたときの precision は 0.846 です。
+  - Top-2 まで見ると、「その他」の件でも 0.763（`bench_en` 0.917）です。
+- 著者 1 人が書いた 90 件の検査（勘定科目 10 項目 + 「その他: 上記以外」）では、どの項目にも当たらない 10 件で、その他が選ばれた率は次のとおりでした。
+  - 0.295（ランダムな 20 順序）。
+  - 0.155（その他を最後に固定）。
+  - 0.055（最後に固定し、説明文なし）。
+- 取りこぼした state は、意味の近いリストの項目に入ります（家賃 → 水道光熱費、収入印紙 → 通信費）。
+- **それでも P(その他) の順位は取れています**（AUROC 0.94、5 項目 + その他で 0.91）。
+  - P(その他) を取り出して、用途に合わせた閾値で判定してください。
+  - 閾値の効き方はデータで大きく変わります。例えば P ≥ 0.1 での recall は、`bench_ja` 0.395、`bench_en` 0.771 でした（`bench_en` では、その他以外の 20.7% も拾う）。
+- 人間でも判断が割れる対（消耗品費 / 事務用品費、会議費 / 交際費の飲食）も、分離できていません。
+  - 消耗品費の state は、半分以上が事務用品費と答えられました。
+  - 取引先との飲食（交際費）は、会議費と答えられることが多くありました。
+- 運用の目安は `docs/choice_guidance.md` にあります（リポジトリ）。
 
 ### `bool` の閾値と P(true) の過少予測
 
@@ -238,7 +288,8 @@ typed-decisions-ja（英語の `LocalLLaMA/typed-decisions` の日本語版）�
 - 評価セットの `bench_ja` / `bench_en` も合成データで、ドメインは業務の問い合わせ文だけです。
 - `bool` は、学習で見ていない言い回しの質問では弱いです。自分のデータで検証してから使ってください。
 - レイテンシは質問数に比例します（質問ごとに state をエンコードし直す）。v0.2 で `bench_ja` の 3 問 × 1 件は、中央値 22.8 ms（p95 27.5 ms、RTX 5090）、371 ms（p95 583 ms、Core Ultra 9 285K の CPU、24 スレッド）でした（リポジトリの `docs/latency.md`）。
-- v0.2.1 の既定で較正されるのは `bool` だけです。`score` と `choice` の確率は、較正されていない生の値です。
+- 較正されるのは `bool` だけです。`choice` は v0.3.0 に向けて見直しましたが、raw のままです。val で fit した温度が、`bench_ja` の choice ECE を下げ（0.088 → 0.066）、`bench_en` では上げた（0.091 → 0.228）ためです。
+  - `bench_ja` では、300 件中 224 件が P(top1) ≥ 0.99 で、そのうち 14 件（6.25%）が誤答でした。数値の confidence を画面に出す前に、手元のデータで P(top1) の分布を確かめてください。
 - 人間の最終判断を置き換える用途（採用、与信、懲戒、医療、法務の決定）には使わないでください。
 
 ## `bench_ja` / `bench_en` のライセンスと使い方
