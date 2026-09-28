@@ -31,7 +31,7 @@
 
 ### Hugging Face Space
 
-- `spaces/demo/`: v0.2.1 用の Gradio デモ（無料の CPU、state を文字列で渡す、noul だけ較正）。公開先は `GeneLab/sokudan-demo` です。
+- `spaces/demo/`: v0.2.1 用の Gradio デモ（無料の CPU、state を文字列で渡す、noul だけ較正）。公開先に予定した `GeneLab/sokudan-demo` は、作成が HF に 402 で拒否されたため、まだありません（2026-09-28。Gradio の Space を無料の cpu-basic で置くには PRO が必要、という応答。`docs/release_v0.2.1.md`）。
 - 以前の `space/`（v0.1 用）は削除しました。
 
 ### PyPI
