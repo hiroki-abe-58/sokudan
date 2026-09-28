@@ -370,10 +370,21 @@ def resolve_temperatures(
     return read_temperatures(path)
 
 
+def resolve_device(device: str | None = "auto") -> str:
+    """`"auto"` (or None): cuda, then mps, then cpu. Any other value is used as given."""
+    if device not in (None, "auto"):
+        return device
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def load(
     checkpoint: str | Path,
     *,
-    device: str | None = None,
+    device: str | None = "auto",
     temperatures: str | Path | dict[tuple[str, int], float] | None = DEFAULT_CALIBRATION,
 ) -> Agent:
     """Load a checkpoint, from disk or from the Hub.
@@ -383,7 +394,8 @@ def load(
             `model.safetensors` + `config.json`, or a Hub repo id such as
             `GeneLab/sokudan-ja-310m`. A repo id may carry a revision after `@`
             (`GeneLab/sokudan-ja-310m@seed1`).
-        device: defaults to cuda when available.
+        device: `"auto"` (the default) picks cuda, then mps, then cpu; `"cpu"`,
+            `"cuda"`, `"mps"` (or any torch device string) are used as given.
         temperatures: by default (v0.2.1) the `calibration.json` shipped beside the
             checkpoint, **bool temperatures only** -- score and choice stay raw
             (docs/calibration.md §10). `None` turns calibration off (the raw head
@@ -396,7 +408,7 @@ def load(
     from sokudan.config import BACKBONE_MODEL_ID
     from sokudan.model.sokudan import SokudanModel
 
-    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    device = resolve_device(device)
     blob, resolved_dir = _resolve_checkpoint(checkpoint)
     parsed = resolve_temperatures(temperatures, resolved_dir)
     config = blob.get("config", {})

@@ -219,8 +219,8 @@ def main(argv: list[str] | None = None) -> int:
                              "model.safetensors, or a model.pt "
                              f"(default {DEFAULT_MODEL_REF}, i.e. the Hub main: v0.2 "
                              "weights plus the v0.2.1 calibration.json)")
-    parser.add_argument("--device", default=None,
-                        help="cpu or cuda (default: cuda when available)")
+    parser.add_argument("--device", default="auto",
+                        help="auto (the default: cuda, then mps, then cpu), cpu, cuda or mps")
     parser.add_argument("--temperatures", default=None,
                         help="default: the bool calibration shipped beside the weights "
                              "(score and choice stay raw); 'none' or 'off' for raw "

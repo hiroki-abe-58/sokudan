@@ -18,7 +18,7 @@ sokudan serve                                   # GeneLab/sokudan-ja-310m（HF �
 | `--model` | `GeneLab/sokudan-ja-310m` | Hub の repo id（`@revision` 可。v0.1 は `GeneLab/sokudan-ja-310m@v0.1`）、`model.safetensors` のあるディレクトリ、または `model.pt` |
 | `--host` | `127.0.0.1` | 他の機械から受けるなら `0.0.0.0` |
 | `--port` | `8000` | |
-| `--device` | CUDA があれば `cuda` | `cpu` で CPU 推論 |
+| `--device` | `auto`（`cuda` → `mps` → `cpu` の順で使えるもの） | `cpu` / `cuda` / `mps` を明示すると、そのデバイス |
 | `--temperatures` | 同梱の bool 較正 | 既定（v0.2.1）は、重みの横の `calibration.json` の **bool の温度だけ**を当てます（score と choice は生の確率）。`none` または `off` で較正なし。ファイルを指定すると、その温度をすべて当てます。環境変数 `SOKUDAN_TEMPERATURES` でも指定できます |
 | `--max-concurrency` / `--max-queue` | 1 / 32 | 同時に走らせる推論の数と、待たせる数。超えると 429 |
 
