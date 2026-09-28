@@ -12,7 +12,7 @@
 - ライセンス: Apache-2.0
 - 開発環境: RTX 5090 (Blackwell, sm_120) 1枚
 
-> **Status: v0.2.1。** 重みは v0.2（2026-09-27）と同じで、v0.1（2026-09-20〜21 の 2 日スプリント）と同じ設定で学習した 8 本の重みを平均した model soup です。v0.2.1 では、`bool` の温度較正を既定で on にし、`/v1/systemone` 互換サーバー（`sokudan serve`）を加えました（[CHANGELOG](https://github.com/hiroki-abe-58/sokudan/blob/main/CHANGELOG.md)）。
+> **Status: v0.3.0。** 重みは v0.2（2026-09-27）と同じで、v0.1（2026-09-20〜21 の 2 日スプリント）と同じ設定で学習した 8 本の重みを平均した model soup です。v0.2.1 では、`bool` の温度較正を既定で on にし、`/v1/systemone` 互換サーバー（`sokudan serve`）を加えました。v0.3.0 では、Apple Silicon で MLX で動くようにし、プラットフォームごとに入る依存を分けました（[CHANGELOG](https://github.com/hiroki-abe-58/sokudan/blob/main/CHANGELOG.md)）。
 > 公開先: [`GeneLab/sokudan-ja-310m`](https://huggingface.co/GeneLab/sokudan-ja-310m)（v0.1 は revision `v0.1`）
 > **この README の数値はすべて本機で実行したコードの出力です。** 推定値はありません。
 > 未測定のものは「測定していない」と書きます。
@@ -167,7 +167,7 @@ print(result["answers"]["department"]["choice"])
 
 返ってくる確率は **head のロジットを直接読んだもの**です。
 モデルに「どれくらい自信があるか」を自己申告させた値ではありません。
-**v0.2.1 の `load` は、重みに同梱した `calibration.json` の `bool` の温度（1 つ）だけを既定で当てます。** `choice` と `score` の確率は較正していない生の値です。
+**v0.2.1 以降の `load` は、重みに同梱した `calibration.json` の `bool` の温度（1 つ）だけを既定で当てます。** `choice` と `score` の確率は較正していない生の値です。
 
 ```python
 agent = sokudan.load("GeneLab/sokudan-ja-310m")                     # bool だけ較正（既定）
@@ -286,7 +286,7 @@ train / eval / serve はすべてここを import します。
   （[`docs/benchmarks.md`](docs/benchmarks.md) §5 の追試）。
   残る説明はその条件固有の選択肢の並びですが、**未検証の仮説です。**
   いずれにせよ K≥4 の性能を K=3 から外挿しないでください。
-- **較正は `bool` だけです（v0.2.1 の既定）。** `score` と `choice` は生の確率です。
+- **較正は `bool` だけです（v0.2.1 以降の既定）。** `score` と `choice` は生の確率です。
   v0.2 で val に fit した `score` の温度は、`bench_ja` の score RPS を 0.075 → 0.132 に悪化させました（v0.1 でも 0.090 → 0.149）。
   `bool` の温度（held-out で交差評価して fit）は、`bench_ja` の bool ECE を 0.181 → 0.105、`bench_en` を 0.249 → 0.151 に下げました（[`docs/calibration.md`](docs/calibration.md)）。
 - **評価は `bench_ja` の3スキーマのみ**（部署ルーティング4択 / 緊急度3段階 / 解約示唆）、

@@ -4,7 +4,7 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/hiroki-abe-58/sokudan/blob/main/LICENSE)
 [![Hugging Face: GeneLab/sokudan-ja-310m](https://img.shields.io/badge/%F0%9F%A4%97%20model-GeneLab%2Fsokudan--ja--310m-yellow)](https://huggingface.co/GeneLab/sokudan-ja-310m)
-[![Release: v0.2.1](https://img.shields.io/badge/release-v0.2.1-green)](https://github.com/hiroki-abe-58/sokudan/releases/tag/v0.2.1)
+[![Release: v0.3.0](https://img.shields.io/badge/release-v0.3.0-green)](https://github.com/hiroki-abe-58/sokudan/releases/tag/v0.3.0)
 [![PyPI: sokudan](https://img.shields.io/pypi/v/sokudan)](https://pypi.org/project/sokudan/)
 
 *日本語: [README_ja.md](https://github.com/hiroki-abe-58/sokudan/blob/main/README_ja.md)*
@@ -58,7 +58,7 @@ Question types are `choice`, `score` (an ordinal scale) and `noul` (P(yes); `boo
 
 **Backends (v0.3.0).** `sokudan.load(..., backend="auto" | "mlx" | "torch", dtype=None | "float16" | "float32")`. `auto` tries MLX (Apple silicon with `mlx` installed), then torch on mps, cuda and cpu; each candidate answers one short self-check request, and a failure is a warning followed by the next candidate. An explicit `backend` or `device` does not fall back. `agent.backend` says which one is in use. MLX runs float16 by default (the heads stay float32); on `bench_ja`, MLX float32 and float16 give the same four metrics as torch to three decimals. Details and measurements: [`docs/mlx.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/mlx.md).
 
-**Calibration (v0.2.1).** `load` applies one temperature to `noul`/`bool` answers by default (the `calibration.json` shipped with the weights); `choice` and `score` probabilities are raw. `sokudan.load(..., temperatures=None)` turns it off. Each result says which answers were calibrated (`calibrated`, `calibrated_answers`).
+**Calibration (since v0.2.1).** `load` applies one temperature to `noul`/`bool` answers by default (the `calibration.json` shipped with the weights); `choice` and `score` probabilities are raw. `sokudan.load(..., temperatures=None)` turns it off. Each result says which answers were calibrated (`calibrated`, `calibrated_answers`).
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb) The same steps in a notebook on a free CPU runtime: the three question types, calibration on and off, and `sokudan serve` called with `curl` ([`notebooks/sokudan_quickstart.ipynb`](https://github.com/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb)).
 

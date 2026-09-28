@@ -12,7 +12,13 @@
 - extras: `sokudan[torch]`（どこでも torch を足す）、`sokudan[mlx]`（上と同じ条件で MLX）、`sokudan[serve]`。
 - `backend="torch"` / `"mlx"` を指定して、そのライブラリが入っていないときは、`pip install "sokudan[torch]"` / `"sokudan[mlx]"` を案内する ImportError になります。
 - Apple Silicon で torch を使う既存のコード（学習・評価のスクリプト、`backend="torch"`）は `sokudan[torch]` が必要です。
-- 0.3.0 の wheel をクリーンな Python 3.11 環境に入れると、68 パッケージ（torch なし）、`site-packages` 934 MB でした。
+- **データ生成・学習・評価だけが使う依存（`datasets`、`fugashi`、`unidic-lite`、`matplotlib`）は extra `train` に移しました。** `load` + `predict`（MLX・torch）と `sokudan serve` のどれでも import されないことを、`sys.modules` と `python -X importtime` で確かめています。スクリプトを動かすときは `pip install "sokudan[train]"`（`dev` extra は `train` を含む）。移動の前後で、630 問の合成セットの確率は torch cpu・MLX float16 とも同一（差 0）でした。
+- {{E1_SIZE}}
+
+### 既知の事項
+
+- **torch が入っている環境では、MLX でロードしても torch が import されます。** tokenizer と backbone の config に使う transformers が、入っている torch を import するためです（`import sokudan` 自体は torch を import しません）。
+- **`uv.lock` の torch は、`tool.uv.sources` の cu128 index（torch 2.11.0+cu128）のままです。** lock 内の torch の wheel は manylinux x86_64 / aarch64 と win_amd64 だけで、macOS 用はありません。source に `sys_platform != 'darwin'` を付けて lock し直すと、macOS 用の torch 2.14.0（wheel は `macosx_14_0_arm64` のみ）が加わる一方、linux / win の torch エントリにも `resolution-markers` の 5 行が加わったので、変更は入れていません。
 
 ### MLX バックエンド（Apple Silicon）
 
