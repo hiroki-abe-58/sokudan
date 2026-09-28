@@ -114,6 +114,10 @@ Development version: `pip install "sokudan[serve] @ git+https://github.com/hirok
 Built from public documentation and the examples in open implementations' READMEs; not affiliated with or endorsed by TypeSafe AI, and this repository never calls their service.
 Guide: [`docs/serving.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/serving.md). Field-by-field table: [`docs/systemone_wire_format.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/systemone_wire_format.md).
 
+## Used by
+
+- Expense account suggestion in an accounting app (PoC): given a purchase description, sokudan ranks 1–3 candidate accounts for a human to confirm, running on an M1 Max. [Thread on X](https://x.com/t28k2/status/2104322335671206306)
+
 ## More
 
 - [README_ja.md](https://github.com/hiroki-abe-58/sokudan/blob/main/README_ja.md): the Japanese README, with the design notes (joint encoding, the dynamic-K cumulative link) and every limit.

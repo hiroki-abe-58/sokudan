@@ -362,6 +362,10 @@ sokudan serve --port 8000
 - **state は文字列で送ってください**（上の Quickstart の注意と同じ理由です）。
 - 手順: [`docs/serving.md`](docs/serving.md)。各フィールドの扱いと、資料どうしの食い違い: [`docs/systemone_wire_format.md`](docs/systemone_wire_format.md)。
 
+## Used by
+
+- 会計アプリの勘定科目の候補提示（PoC）: 購入内容の文から 1〜3 件の勘定科目候補を順位づけし、人が確認する。M1 Max で動作。[X のスレッド](https://x.com/t28k2/status/2104322335671206306)
+
 ## TypeSafe Jev について
 
 TypeSafe の利用規約（Master Customer Agreement 2.3(b)）が、同サービスおよびその出力を類似製品の開発に用いることを禁じているため、本プロジェクトでは Jev を実測していません。
