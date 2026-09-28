@@ -1,6 +1,6 @@
 [project]
 name = "sokudan"
-version = "0.2.1"
+version = "0.3.0"
 description = "Japanese System One decision model: typed answers + probabilities in a single forward pass, no text generation."
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
@@ -22,8 +22,13 @@ classifiers = [
 
 # Upper bounds are the next major version above what uv.lock resolves today; the
 # lower bounds are the ones the code has been developed against.
+#
+# v0.3.0: the array library depends on the platform (docs/mlx.md). Apple silicon on macOS
+# 14 or later (Darwin 23+) gets MLX and no torch; every other platform gets torch. The
+# rest is shared by both backends. `sokudan[torch]` adds torch anywhere.
 dependencies = [
-  "torch>=2.8,<3",
+  "torch>=2.8,<3; sys_platform != 'darwin' or platform_machine != 'arm64' or platform_release < '23'",
+  "mlx>=0.32.2,<0.33; sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '23'",
   "transformers>=4.48.0,<6",
   "tokenizers>=0.21,<1",
   # Imported directly by sokudan.predict (Hub download, safetensors weights). They
@@ -54,10 +59,13 @@ serve = [
   "fastapi>=0.115,<1",
   "uvicorn[standard]>=0.30,<1",
 ]
-# The MLX backend on Apple silicon (docs/mlx.md). 0.32.2 is the only MLX version it has
-# been run with.
+# The torch backend on any platform (training, evaluation, `backend="torch"` on a Mac).
+torch = [
+  "torch>=2.8,<3",
+]
+# The MLX backend; the base dependencies already install it where it applies.
 mlx = [
-  "mlx==0.32.2; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "mlx>=0.32.2,<0.33; sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '23'",
 ]
 # The Gradio demo in spaces/demo/.
 demo = [

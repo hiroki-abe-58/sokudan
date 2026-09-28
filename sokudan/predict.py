@@ -395,14 +395,26 @@ def _candidates(backend: str, device: str | None) -> Iterator[tuple[str, str]]:
     yield "torch", "cpu"
 
 
+INSTALL_HINTS = {
+    "torch": 'pip install "sokudan[torch]"',
+    "mlx": 'pip install "sokudan[mlx]" (Apple silicon, macOS 14 or later)',
+}
+
+
 def _load_backend(name: str, path: Path, device: str, dtype: str | None) -> Backend:
-    if name == "mlx":
-        from sokudan.backends.mlx import MLXBackend
+    try:
+        if name == "mlx":
+            from sokudan.backends.mlx import MLXBackend
 
-        return MLXBackend.load(path, dtype=dtype)
-    from sokudan.backends.torch_backend import TorchBackend
+            return MLXBackend.load(path, dtype=dtype)
+        from sokudan.backends.torch_backend import TorchBackend
 
-    return TorchBackend.load(path, device=device, dtype=dtype)
+        return TorchBackend.load(path, device=device, dtype=dtype)
+    except ModuleNotFoundError as exc:
+        if (exc.name or "").split(".")[0] != name:
+            raise
+        raise ImportError(f"backend={name!r} needs {name}, which is not installed: "
+                          f"{INSTALL_HINTS[name]}") from exc
 
 
 def self_check(agent: Agent) -> None:
@@ -453,8 +465,6 @@ def load(
     """
     import warnings
 
-    from transformers import AutoTokenizer
-
     path = locate_checkpoint(checkpoint)
     parsed = resolve_temperatures(temperatures, path.parent if path.is_file() else path)
     fallback = backend == "auto" and device in (None, "auto")
@@ -462,6 +472,8 @@ def load(
     for name, where in _candidates(backend, device):
         try:
             runner = _load_backend(name, path, where, dtype)
+            from transformers import AutoTokenizer
+
             agent = Agent(runner, AutoTokenizer.from_pretrained(runner.backbone_id),
                           temperatures=parsed, encoding=runner.encoding)
             self_check(agent)
