@@ -18,6 +18,7 @@ pip install sokudan
   MLX (the markers are fixed by `tests/test_packaging.py`). `pip install "sokudan[torch]"`
   adds torch anywhere; `"sokudan[mlx]"` names MLX explicitly, with the same marker.
 - MLX 0.32.2 is the only version this backend has been run with.
+- Installing 0.3.0 from PyPI brings mlx 0.32.3 (measured 2026-09-29); with 0.32.3, MLX float16 on the 630-question parity set was bit-identical to 0.32.2.
 - A clean install of the 0.3.0 wheel into a new Python 3.11 environment on the machine
   below: 38 packages, `mlx` and `mlx-metal` 0.32.2, no torch, `site-packages` 393 MB (the
   largest distributions: mlx-metal 155 MB, transformers 103 MB, numpy 33 MB). `sokudan.load()`

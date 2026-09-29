@@ -12,6 +12,7 @@ pip install sokudan
 
 - v0.3.0 から、Apple Silicon の macOS 14 以降（Darwin 23 以降）では、基本のインストールで `mlx>=0.32.2,<0.33` が入り、**torch は入りません**。それ以外では torch が入り、MLX は入りません（マーカーは `tests/test_packaging.py` で固定）。`pip install "sokudan[torch]"` はどこでも torch を足します。`"sokudan[mlx]"` は同じマーカーで MLX を明示する extra です。
 - このバックエンドを動かした MLX は 0.32.2 だけです。
+- PyPI から 0.3.0 を入れると mlx 0.32.3 が入ります（2026-09-29 に実測）。0.32.3 でも、630 問の合成セットの MLX float16 は 0.32.2 とビット一致でした。
 - 下記の機械で、0.3.0 の wheel を新しい Python 3.11 環境に入れた結果: 38 パッケージ、`mlx` と `mlx-metal` 0.32.2、torch なし、`site-packages` 393 MB（大きいもの: mlx-metal 155 MB、transformers 103 MB、numpy 33 MB）。`sokudan.load()` は MLX float16 を選び、Quickstart の `predict` が通り、torch は import されませんでした。`[torch]` 付きでは 44 パッケージ、1.1 GB で、`load()` は MLX を、`backend="torch"` は mps を選びました。
 - `datasets`、`fugashi`、`unidic-lite`、`matplotlib` は extra `train` にあります。どれも load + predict（MLX・torch）と `sokudan serve` のいずれでも import されません。移す前の同じインストールは 66 パッケージ、934 MB でした。
 - `import sokudan` は torch を import しません。torch が入っている環境では、MLX でロードしても torch が import されることがあります（tokenizer と backbone の config に使う transformers が、入っている torch を import するため）。
