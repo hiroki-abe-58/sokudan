@@ -12,6 +12,12 @@ reporting a number nobody else can reproduce.
 `bench_ja` is unseen at training time in two senses that both matter: the documents
 were never trained on, and none of its three schemas -- nor their option strings --
 appear anywhere in the training catalogue (`scripts/build_train_data.py` checks).
+
+v0.3.0: the checkpoint is loaded with `sokudan.load` (a `.pt`, a safetensors directory or
+a Hub id) on the requested backend. The batches are the training collator's, as before.
+torch runs them through `run_model` exactly as before (scripts/bench_calibration.py hooks
+it); MLX runs the same batches, converted to numpy, through `agent.backend.probs`, so the
+torch and MLX rows are scored on identical inputs.
 """
 
 from __future__ import annotations
@@ -23,20 +29,32 @@ from typing import Any
 import numpy as np
 import torch
 
+from sokudan.backends import Batch
 from sokudan.calibration.temperature import apply_temperature
 from sokudan.eval.baselines import BaselineOutput
 from sokudan.eval.bench_ja import DEPARTMENTS, URGENCY_LEVELS, BenchItem, bench_questions
 from sokudan.schema.question import parse_question
-from sokudan.train.dataset import Example
+from sokudan.train.dataset import Example, JointBatch
 from sokudan.train.loop import TrainConfig, build_collator, run_model
+
+
+def numpy_batch(batch: JointBatch) -> Batch:
+    """A joint collator batch as the backends' `Batch` (the MLX backend is joint only)."""
+    back = batch.marker_positions_back
+    return Batch(batch.input_ids.numpy(), batch.attention_mask.numpy(),
+                 batch.marker_positions.numpy(), batch.marker_mask.numpy(),
+                 batch.ordered.numpy().astype(bool),
+                 None if back is None else back.numpy())
 
 
 class SokudanBaseline:
     """A trained checkpoint answering the bench_ja questions.
 
     Args:
-        checkpoint: a `model.pt` written by `scripts/train.py`.
+        checkpoint: a `model.pt` written by `scripts/train.py`, a directory with
+            `model.safetensors`, or a Hub repo id.
         label: the row name in the report.
+        backend / device / dtype: passed to `sokudan.load` (explicit, so no fallback).
         temperatures: optional `{(kind, n_options): T}` from Stage 2. Applied exactly
             as §8 Stage 2 specifies -- one temperature per (question type, option
             count) bucket, fitted on validation data, never on `bench_ja`.
@@ -47,63 +65,41 @@ class SokudanBaseline:
         checkpoint: str | Path,
         label: str = "sokudan-ja-310m",
         *,
+        backend: str = "torch",
         device: str = "cuda",
+        dtype: str | None = None,
         batch_size: int = 16,
         temperatures: dict[tuple[str, int], float] | None = None,
     ) -> None:
-        self.checkpoint = Path(checkpoint)
+        self.checkpoint = checkpoint
         self.name = label
+        self.backend = backend
         self.device = device
+        self.dtype = dtype
         self.batch_size = batch_size
         self.temperatures = temperatures or {}
-        self._model: Any | None = None
-        self._encoding = "separate"
-        self._tokenizer: Any | None = None
+        self._agent: Any | None = None
 
-    def _load(self) -> tuple[Any, Any]:
-        if self._model is None:
-            from transformers import AutoTokenizer
+    def _load(self) -> Any:
+        if self._agent is None:
+            import sokudan
 
-            from sokudan.config import BACKBONE_MODEL_ID
-
-            blob = torch.load(self.checkpoint, map_location="cpu", weights_only=False)
-            config = blob.get("config", {})
-            # The checkpoint records which arm trained it (`scripts/train.py`), so a
-            # joint checkpoint cannot be scored through the separate path by
-            # forgetting a flag -- that would report a number for an architecture
-            # that was never trained.
-            self._encoding = config.get("encoding", "separate")
-            if self._encoding == "joint":
-                from sokudan.model.joint import SokudanJointModel
-
-                model = SokudanJointModel.from_pretrained_backbone(
-                    config.get("backbone", BACKBONE_MODEL_ID)
-                )
-            else:
-                from sokudan.model.sokudan import SokudanModel
-
-                model = SokudanModel.from_pretrained_backbone(
-                    config.get("backbone", BACKBONE_MODEL_ID),
-                    n_head_layers=config.get("n_head_layers", 2),
-                )
-            model.load_state_dict(blob["state_dict"])
-            model.to(self.device).eval()
-            self._model = model
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                config.get("backbone", BACKBONE_MODEL_ID)
-            )
-        return self._model, self._tokenizer
+            self._agent = sokudan.load(self.checkpoint, backend=self.backend,
+                                       device=self.device, dtype=self.dtype,
+                                       temperatures=None)
+        return self._agent
 
     def _temperature_for(self, kind: str, n_options: int) -> float:
         return self.temperatures.get((kind, n_options), 1.0)
 
     @torch.no_grad()
     def run(self, items: list[BenchItem]) -> BaselineOutput:
-        model, tokenizer = self._load()
+        agent = self._load()
+        runner = agent.backend
         collator = build_collator(
-            tokenizer,
-            TrainConfig(device=self.device, encoding=self._encoding,
-                        max_state_tokens=1024),
+            agent.tokenizer,
+            TrainConfig(device="cpu", encoding=runner.encoding, max_state_tokens=1024,
+                        input_order=runner.input_order),
         )
         questions = bench_questions()
 
@@ -129,9 +125,12 @@ class SokudanBaseline:
                             domain="bench_ja", attribute=name, kind=kind)
                     for item in chunk
                 ]
-                batch = collator(examples).to(self.device)
-                out = run_model(model, batch)
-                probs = out.probs.float().cpu().numpy()
+                batch = collator(examples)
+                if runner.name == "torch":
+                    out = run_model(runner.model, batch.to(runner.device))
+                    probs = out.probs.float().cpu().numpy()
+                else:
+                    probs = runner.probs(numpy_batch(batch))
                 n_options = int(batch.marker_mask[0].sum())
                 temperature = self._temperature_for(kind, n_options)
                 if temperature != 1.0:
@@ -159,6 +158,8 @@ class SokudanBaseline:
             parse_attempts=len(items) * 3,
             notes={
                 "checkpoint": str(self.checkpoint),
+                "backend": {"name": runner.name, "device": runner.device,
+                            "dtype": runner.dtype},
                 "description": "head logits read directly; no text generation, nothing to parse",
                 "temperatures": {f"{k[0]}/{k[1]}": v for k, v in self.temperatures.items()},
                 "unseen_schema": (

@@ -10,3 +10,9 @@ You may obtain a copy of the License at
 This product uses the backbone model `sbintuitions/modernbert-ja-310m`,
 distributed by SB Intuitions Corp. under the MIT License.
 See docs/licenses.md for the primary-source record.
+
+sokudan/backends/mlx/modernbert.py is taken unmodified from laya-mlx 0.2.0
+(https://github.com/mizorewww/laya-mlx, PyPI wheel laya_mlx-0.2.0,
+laya_mlx/model.py lines 13-154), Copyright 2026 laya-mlx contributors,
+licensed under the Apache License, Version 2.0. laya-mlx's own NOTICE states that
+its network follows the ModernBERT architecture in Hugging Face Transformers.

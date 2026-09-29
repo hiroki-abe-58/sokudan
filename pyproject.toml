@@ -1,9 +1,9 @@
 [project]
 name = "sokudan"
-version = "0.2.1"
+version = "0.3.0"
 description = "Japanese System One decision model: typed answers + probabilities in a single forward pass, no text generation."
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11,<3.14"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "hiroki-abe-58" }]
@@ -16,14 +16,21 @@ classifiers = [
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Text Processing :: Linguistic",
 ]
 
 # Upper bounds are the next major version above what uv.lock resolves today; the
 # lower bounds are the ones the code has been developed against.
+#
+# v0.3.0: the array library depends on the platform (docs/mlx.md). Apple silicon on macOS
+# 14 or later (Darwin 23+) gets MLX and no torch; every other platform gets torch. The
+# rest is shared by both backends. `sokudan[torch]` adds torch anywhere.
 dependencies = [
-  "torch>=2.8,<3",
+  "torch>=2.8,<3; sys_platform != 'darwin' or platform_machine != 'arm64' or platform_release < '23'",
+  "mlx>=0.32.2,<0.33; sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '23'",
   "transformers>=4.48.0,<6",
   "tokenizers>=0.21,<1",
   # Imported directly by sokudan.predict (Hub download, safetensors weights). They
@@ -32,18 +39,24 @@ dependencies = [
   "safetensors>=0.4,<1",
   "pydantic>=2.7,<3",
   "numpy>=1.26,<3",
-  "datasets>=3.0,<6",
-  "fugashi>=1.3,<2",
-  "unidic-lite>=1.0.8,<2",
   "httpx>=0.27,<1",
   "python-dotenv>=1.0,<2",
   "tqdm>=4.66,<5",
-  "matplotlib>=3.8,<4",
   "rich>=13.7,<16",
 ]
 
 [project.optional-dependencies]
+# Data building, training and evaluation (scripts/, sokudan.data / train / eval). Moved out
+# of the base dependencies in v0.3.0: none of them is imported by load + predict (MLX or
+# torch) or by `sokudan serve` (measured with sys.modules and -X importtime).
+train = [
+  "datasets>=3.0,<6",
+  "fugashi>=1.3,<2",
+  "unidic-lite>=1.0.8,<2",
+  "matplotlib>=3.8,<4",
+]
 dev = [
+  "sokudan[train]",
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
   "ruff>=0.6",
@@ -53,6 +66,14 @@ dev = [
 serve = [
   "fastapi>=0.115,<1",
   "uvicorn[standard]>=0.30,<1",
+]
+# The torch backend on any platform (training, evaluation, `backend="torch"` on a Mac).
+torch = [
+  "torch>=2.8,<3",
+]
+# The MLX backend; the base dependencies already install it where it applies.
+mlx = [
+  "mlx>=0.32.2,<0.33; sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '23'",
 ]
 # The Gradio demo in spaces/demo/.
 demo = [

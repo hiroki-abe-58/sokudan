@@ -15,8 +15,10 @@ import pytest
 BLACKWELL_CAPABILITY = (12, 0)  # RTX 5090, sm_120
 
 
-def test_python_is_311() -> None:
-    assert sys.version_info[:2] == (3, 11), f"expected Python 3.11, got {sys.version}"
+def test_python_is_supported() -> None:
+    # v0.3.0: requires-python ">=3.11,<3.14" (3.11 is the training machine's version;
+    # 3.12 and 3.13 are tested on the CPU with PyPI's torch)
+    assert (3, 11) <= sys.version_info[:2] <= (3, 13), f"unsupported Python {sys.version}"
 
 
 def test_transformers_version() -> None:

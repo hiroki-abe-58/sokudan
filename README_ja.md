@@ -12,7 +12,7 @@
 - ライセンス: Apache-2.0
 - 開発環境: RTX 5090 (Blackwell, sm_120) 1枚
 
-> **Status: v0.2.1。** 重みは v0.2（2026-09-27）と同じで、v0.1（2026-09-20〜21 の 2 日スプリント）と同じ設定で学習した 8 本の重みを平均した model soup です。v0.2.1 では、`bool` の温度較正を既定で on にし、`/v1/systemone` 互換サーバー（`sokudan serve`）を加えました（[CHANGELOG](https://github.com/hiroki-abe-58/sokudan/blob/main/CHANGELOG.md)）。
+> **Status: v0.3.0。** 重みは v0.2（2026-09-27）と同じで、v0.1（2026-09-20〜21 の 2 日スプリント）と同じ設定で学習した 8 本の重みを平均した model soup です。v0.2.1 では、`bool` の温度較正を既定で on にし、`/v1/systemone` 互換サーバー（`sokudan serve`）を加えました。v0.3.0 では、Apple Silicon で MLX で動くようにし、プラットフォームごとに入る依存を分けました（[CHANGELOG](https://github.com/hiroki-abe-58/sokudan/blob/main/CHANGELOG.md)）。
 > 公開先: [`GeneLab/sokudan-ja-310m`](https://huggingface.co/GeneLab/sokudan-ja-310m)（v0.1 は revision `v0.1`）
 > **この README の数値はすべて本機で実行したコードの出力です。** 推定値はありません。
 > 未測定のものは「測定していない」と書きます。
@@ -109,6 +109,33 @@ pip install sokudan
 - 開発版（`main` ブランチ）: `pip install git+https://github.com/hiroki-abe-58/sokudan.git`。手元で開発するときは、clone して `pip install -e .` です。
 - Colab のノートブック（無料の CPU ランタイム。3 型、較正の on/off、`sokudan serve` を curl で叩くところまで）: [Open in Colab](https://colab.research.google.com/github/hiroki-abe-58/sokudan/blob/main/notebooks/sokudan_quickstart.ipynb)（[`notebooks/sokudan_quickstart.ipynb`](notebooks/sokudan_quickstart.ipynb)）
 
+### インストールされるもの（v0.3.0）
+
+`pip install sokudan` で入る配列ライブラリは、プラットフォームで変わります。
+
+| プラットフォーム | 入るもの | `sokudan.load()` の実行先 |
+|---|---|---|
+| Apple Silicon、macOS 14 以降 | MLX（`mlx>=0.32.2,<0.33`）。**torch は入らない** | MLX、float16 |
+| Linux、Windows、Intel Mac、macOS 13 の Apple Silicon | torch | torch（cuda → mps → cpu） |
+
+- `pip install "sokudan[torch]"` は、どのプラットフォームでも torch を足します（Apple Silicon で `backend="torch"` を使うとき、学習・評価のスクリプトを動かすとき）。
+- Windows / Linux で GPU を使う場合は、先に CUDA 版の torch（例: `pip install torch --index-url https://download.pytorch.org/whl/cu128`）を入れてから sokudan を入れてください。
+- `pip install "sokudan[mlx]"` は MLX を明示する extra です（入るプラットフォームは上と同じ）。`pip install "sokudan[serve]"` はサーバーを足します。
+
+### バックエンドと dtype（v0.3.0）
+
+```python
+agent = sokudan.load("GeneLab/sokudan-ja-310m")                         # backend="auto"
+agent = sokudan.load("GeneLab/sokudan-ja-310m", backend="mlx", dtype="float32")
+agent = sokudan.load("GeneLab/sokudan-ja-310m", backend="torch", device="cpu")
+print(agent.backend)                                                     # 使われているバックエンド
+```
+
+- `backend="auto"`（既定）は MLX（Apple Silicon で mlx が入っているとき）→ torch の mps → cuda → cpu の順に試します。各候補は短いリクエストを 1 回答えてから使われ、失敗すると warning を出して次に進みます。
+- `backend` や `device` を明示したときはフォールバックしません。入っていないライブラリを指定すると、`pip install "sokudan[torch]"` などを案内する ImportError になります。
+- MLX の既定は float16 です（ヘッドは float32）。`bench_ja` では、MLX の float32 と float16 は、4 指標とも小数第 3 位まで torch と同じでした。
+- 詳細と実測: [`docs/mlx_ja.md`](docs/mlx_ja.md)
+
 ```python
 import sokudan
 
@@ -141,7 +168,7 @@ print(result["answers"]["department"]["choice"])
 
 返ってくる確率は **head のロジットを直接読んだもの**です。
 モデルに「どれくらい自信があるか」を自己申告させた値ではありません。
-**v0.2.1 の `load` は、重みに同梱した `calibration.json` の `bool` の温度（1 つ）だけを既定で当てます。** `choice` と `score` の確率は較正していない生の値です。
+**v0.2.1 以降の `load` は、重みに同梱した `calibration.json` の `bool` の温度（1 つ）だけを既定で当てます。** `choice` と `score` の確率は較正していない生の値です。
 
 ```python
 agent = sokudan.load("GeneLab/sokudan-ja-310m")                     # bool だけ較正（既定）
@@ -241,6 +268,12 @@ train / eval / serve はすべてここを import します。
 - **held-out の状態でも、第 1 スロットはやや不利です**（Laya の presentation_checks と同じ定義、30 状態）。
   - 全選択肢同一の対照: score −0.249、choice −0.280（0 が中立）。
   - 全順列の第 1 スロット率: score 0.239、choice 0.289（順序に依存しなければ 1/3）。
+- **包括的な選択肢（「その他」）は、先頭と最後の位置で選ばれにくくなります。** ふつうの選択肢は、`bench_ja` の部署ルーティングの全 24 順序で、スロットごとの選択率が 0.243〜0.256 とほぼ一様でした。
+- **包括的な選択肢（「その他」）は、argmax ではほとんど選ばれません。**
+  - `bench_ja` で「その他」が正解の 38 件のうち、その他が選ばれたのは 11 件（recall 0.289、`bench_en` 0.354）です。取りこぼしの多くは「技術」に入ります。その他と答えたときの precision は 0.846 です。
+  - 著者 1 人が書いた 90 件の小さな検査（勘定科目 10 項目 + 「その他: 上記以外」）では、どの項目にも当たらない state で、その他が選ばれた率は 0.295（ランダムな順序）、0.155（その他を最後に固定）でした。
+  - それでも P(その他) の順位は取れています（AUROC 0.94）。P(その他) を取り出して、用途に合わせた閾値で判定してください。その他は先頭や最後に置かないでください（[`docs/choice_guidance.md`](docs/choice_guidance.md)、[`docs/probe_catch_all.md`](docs/probe_catch_all.md)）。
+  - 人間でも判断が割れる対（消耗品費 / 事務用品費、会議費 / 交際費の飲食）も、分離できていません。
 - **bool acc は v0.1 より低く（0.780 と 0.788）、true を過少予測します。** 閾値は利用者の事前確率に合わせて決めてください。
 - **state を dict で渡すと、出力が変わります**（上の Quickstart の注意）。
 
@@ -260,9 +293,10 @@ train / eval / serve はすべてここを import します。
   （[`docs/benchmarks.md`](docs/benchmarks.md) §5 の追試）。
   残る説明はその条件固有の選択肢の並びですが、**未検証の仮説です。**
   いずれにせよ K≥4 の性能を K=3 から外挿しないでください。
-- **較正は `bool` だけです（v0.2.1 の既定）。** `score` と `choice` は生の確率です。
+- **較正は `bool` だけです（v0.2.1 以降の既定）。** `score` と `choice` は生の確率です。
   v0.2 で val に fit した `score` の温度は、`bench_ja` の score RPS を 0.075 → 0.132 に悪化させました（v0.1 でも 0.090 → 0.149）。
   `bool` の温度（held-out で交差評価して fit）は、`bench_ja` の bool ECE を 0.181 → 0.105、`bench_en` を 0.249 → 0.151 に下げました（[`docs/calibration.md`](docs/calibration.md)）。
+  v0.3.0 に向けて `choice` の温度も見直しましたが、raw のままです。val で fit した温度は、`bench_ja` の choice ECE を 0.088 → 0.066 に下げる一方、`bench_en` では 0.091 → 0.228 に上げました（[`docs/calibration.md`](docs/calibration.md) §11〜§12）。
 - **評価は `bench_ja` の3スキーマのみ**（部署ルーティング4択 / 緊急度3段階 / 解約示唆）、
   300件・1ドメインです。他のタスクでの性能は測定していません。
 - **`choice` で Laya を上回ることは目標にしていません**（事前実測で既に実用水準だったため）。
@@ -329,6 +363,10 @@ sokudan serve --port 8000
 - **state は文字列で送ってください**（上の Quickstart の注意と同じ理由です）。
 - 手順: [`docs/serving.md`](docs/serving.md)。各フィールドの扱いと、資料どうしの食い違い: [`docs/systemone_wire_format.md`](docs/systemone_wire_format.md)。
 
+## Used by
+
+- 会計アプリの勘定科目の候補提示（PoC）: 購入内容の文から 1〜3 件の勘定科目候補を順位づけし、人が確認する。M1 Max で動作。[X のスレッド](https://x.com/t28k2/status/2104322335671206306)
+
 ## TypeSafe Jev について
 
 TypeSafe の利用規約（Master Customer Agreement 2.3(b)）が、同サービスおよびその出力を類似製品の開発に用いることを禁じているため、本プロジェクトでは Jev を実測していません。
@@ -345,6 +383,9 @@ cp .env.example .env            # ローカルLLM等のキーはすべて環境�
 uv run pytest
 uv run ruff check .
 ```
+
+- v0.3.0 から、データ生成・学習・評価だけが使う依存（`datasets`、`fugashi`、`unidic-lite`、`matplotlib`）は extra `train` にあります。`dev` extra は `sokudan[train]` を含むので、`uv sync --extra dev` で従来どおり入ります。`dev` を使わずにスクリプトだけ動かすときは `uv sync --extra train`（pip なら `pip install "sokudan[train]"`）です。
+- Apple Silicon（macOS 14 以降）では基本の依存に torch が入りません。torch を使うテストや学習には `--extra torch` も付けてください。
 
 再現手順（`bench_ja` の生成からベースライン実測まで）は
 [`docs/baseline_ja.md`](docs/baseline_ja.md) の冒頭にあります。
