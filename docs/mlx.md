@@ -153,6 +153,73 @@ row. torch 2.14.0 on the CPU, mlx 0.32.2.
 - Rule fixed before the run: float16 stays the default unless an accuracy or the AUROC is
   more than 0.01 below torch, or RPS more than 0.005 above. Neither happened.
 
+## Speed on an idle machine (2026-10-01)
+
+**Environment.** MacBook Pro (MacBookPro18,4), Apple M1 Max (10 cores: 8 performance + 2
+efficiency), 64 GB, macOS 15.6.1, on AC power with Low Power Mode off; only iTerm2 and
+Finder were open. Python 3.11.16, sokudan 0.3.0 from PyPI, mlx 0.32.3, torch 2.14.1 (8
+threads), transformers 5.18.0. Two new environments: `pip install sokudan` (MLX) and `pip
+install "sokudan[torch]"` (torch on `mps` and on `cpu`).
+
+**Method.** `agent.predict` end to end (encoding, forward, answers; default calibration),
+`sokudan.load` with default arguments for MLX (float16) and `backend="torch",
+device="mps"` / `device="cpu"` for torch.
+
+- The three backends were loaded at the same time, each in its own process, and kept
+  loaded. After a 60-second wait, each task was run 5 times per backend as warm-up, then
+  in 5 rounds of 10 calls per backend (50 per backend), with the order of the backends
+  changed every round (MLX/MPS/CPU, MPS/CPU/MLX, CPU/MLX/MPS, MLX/MPS/CPU, MPS/CPU/MLX).
+- Measurement started once the 1-minute load average was below 3; it was 1.50-1.75
+  during the measurement.
+- The ratio to torch MPS, computed per round, varied little between rounds: coefficient of
+  variation 0.2-1.3% (MLX/MPS and CPU/MPS, four tasks).
+
+**Tasks.**
+
+| task | state | questions |
+|---|---|---|
+| A | an expense description, 19 characters | 1 choice: account, 5 options with descriptions |
+| B | the same description | 1 choice: account, 10 options with descriptions |
+| C | the Quickstart state, 34 characters | the model card's 3 questions: choice (4 options), score (3 levels), bool |
+| D | a customer inquiry, 392 characters | 1 choice: department, 4 options |
+
+**Median ms** (50 calls per cell), and the ratio with torch MPS = 1:
+
+| backend | A | B | C | D |
+|---|---|---|---|---|
+| MLX float16 | 13.2 (0.59) | 17.0 (0.70) | 17.7 (0.64) | 18.3 (0.69) |
+| torch MPS | 22.3 (1.00) | 24.2 (1.00) | 27.5 (1.00) | 26.4 (1.00) |
+| torch CPU | 95.9 (4.30) | 130.0 (5.37) | 133.4 (4.84) | 147.6 (5.59) |
+
+**The first call after a pause is slower.** The first call of each block of 10 (right
+after another backend ran) was slower: 21-38 ms with MLX. Calls 2-10 have a p95 close to
+their median. A first call after the model has not been used for a while can be slow in
+the same way.
+
+| backend | first call of a block (median of 5), A / B / C / D | calls 2-10, median / p95, A / B / C / D |
+|---|---|---|
+| MLX float16 | 21.4 / 37.2 / 38.2 / 36.3 | 13.2 / 13.6, 17.0 / 17.3, 17.7 / 18.1, 18.3 / 18.8 |
+| torch MPS | 26.8 / 62.4 / 61.0 / 64.8 | 22.3 / 22.8, 24.2 / 24.7, 27.5 / 28.0, 26.4 / 27.1 |
+| torch CPU | 96.0 / 130.9 / 134.5 / 148.0 | 95.9 / 97.8, 130.0 / 131.9, 133.4 / 135.4, 147.6 / 149.6 |
+
+**Load time, size and memory.**
+
+| backend | `sokudan.load` (3 new processes, weights cached, including the self-check) | `site-packages` | peak RSS |
+|---|---|---|---|
+| MLX float16 | 1.96-2.17 s | 395 M (38 packages) | 1,540 MiB |
+| torch MPS | 3.38-4.57 s | 1.1 G (44 packages, MLX included) | 2,737 MiB |
+| torch CPU | 3.23-3.26 s | (same environment) | 2,736 MiB |
+
+- `import sokudan` took 0.45-0.53 s, except the first process of each environment
+  (1.06 s MLX, 0.90 s torch).
+
+**Answers.** In all 6 questions (A-D), the three backends chose the same answer. The
+probabilities differed in the fourth decimal in one question (C, the score: MLX 0.2076 /
+0.4949 / 0.2975, torch MPS and CPU 0.2075 / 0.4951 / 0.2974).
+
+The Windows (CUDA) numbers in `docs/latency.md` were measured under different conditions
+and are not compared here.
+
 ## Speed and memory
 
 **Conditions.** Apple M1 Max (8 performance + 2 efficiency cores), 64 GB, macOS 15.6.1;

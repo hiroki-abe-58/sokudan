@@ -32,6 +32,7 @@ What `pip install sokudan` brings depends on the platform (v0.3.0):
 | Apple silicon, macOS 14 or later | MLX (`mlx>=0.32.2,<0.33`); **no torch** | MLX, float16 |
 | Linux, Windows, Intel Mac, Apple silicon on macOS 13 | torch | torch: cuda, then mps, then cpu |
 
+- On an M1 Max, one 5-option choice takes about 13 ms with MLX, 1.4–1.7x faster than torch on MPS; see [`docs/mlx.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/mlx.md#speed-on-an-idle-machine-2026-10-01).
 - `pip install "sokudan[torch]"` adds torch on any platform (for `backend="torch"` on Apple silicon, and for the training and evaluation scripts).
 - To use a GPU on Windows / Linux, install a CUDA build of torch first (for example `pip install torch --index-url https://download.pytorch.org/whl/cu128`), then install sokudan.
 - `pip install "sokudan[mlx]"` names MLX explicitly (same platforms as above). `pip install "sokudan[serve]"` adds the server.

@@ -2,6 +2,10 @@
 
 数値はすべて本機で実行したコードの出力です。未測定のものは「測定していない」と書きます。
 
+## Unreleased
+
+- ドキュメント: `docs/mlx.md` / `docs/mlx_ja.md` に、静かな状態で 3 backend を交互に測った速度の節を追加（M1 Max、PyPI の 0.3.0、mlx 0.32.3、torch 2.14.1）。README / README_ja のインストールの節に 1 行。
+
 ## v0.3.0 — 2026-09-29 / パッケージ 0.3.0
 
 **モデルの重みは v0.2 のまま（変更なし）です**（`GeneLab/sokudan-ja-310m` の `model.safetensors` と `calibration.json` は v0.2.1 と同じ）。MLX の数値は M1 Max（64 GB、macOS 15.6.1）での実測です（`docs/mlx.md`）。
