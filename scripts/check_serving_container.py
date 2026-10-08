@@ -15,7 +15,7 @@ def main() -> None:
                 health = json.load(response)
             assert health["status"] == "ok", health
             break
-        except (urllib.error.URLError, TimeoutError) as error:
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
             last_error = error
             time.sleep(5)
     else:

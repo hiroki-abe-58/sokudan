@@ -11,7 +11,9 @@ class Sokudan < Formula
   depends_on "uv"
 
   def install
-    libexec.install Dir["*"]
+    # Homebrew relocates top-level libexec README/LICENSE files into the prefix.
+    # Keep the complete build source together for uv's first-run wheel build.
+    (libexec/"source").install Dir["*"]
     (bin/"sokudan").write <<~SH
       #!/bin/sh
       case "$1" in
@@ -26,7 +28,7 @@ class Sokudan < Formula
       if [ "$1" = probe-position ]; then extras=serve,train,bench,torch; fi
       exec "#{Formula["uv"].opt_bin}/uv" tool run \
         --python "#{Formula["python@3.13"].opt_bin}/python3.13" \
-        --from "#{libexec}[$extras]" sokudan "$@"
+        --from "#{libexec}/source[$extras]" sokudan "$@"
     SH
   end
 
