@@ -1,0 +1,45 @@
+name: Scoop bucket
+
+on:
+  pull_request:
+    paths: ['bucket/**', '.github/workflows/scoop.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Scoop in an isolated directory with spaces
+        run: |
+          Invoke-WebRequest https://get.scoop.sh -OutFile "$env:RUNNER_TEMP/install-scoop.ps1"
+          & "$env:RUNNER_TEMP/install-scoop.ps1" -RunAsAdmin -ScoopDir "$env:RUNNER_TEMP/Scoop Test"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "$env:RUNNER_TEMP/Scoop Test/shims" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Install this checkout as a bucket
+        run: |
+          scoop bucket add sokudan $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          scoop install sokudan/sokudan
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Verify installed launcher and first-run Python dependencies
+        run: |
+          $version = sokudan --version
+          if ($LASTEXITCODE -ne 0 -or $version -ne '0.3.0') { throw "Unexpected version: $version" }
+          sokudan --help
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          sokudan serve --help
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Verify errors propagate and uninstall removes the shim
+        run: |
+          sokudan invalid-subcommand
+          if ($LASTEXITCODE -ne 2) { throw "Expected argparse exit 2, got $LASTEXITCODE" }
+          scoop uninstall sokudan
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if (Get-Command sokudan -ErrorAction SilentlyContinue) { throw 'Launcher remains after uninstall' }

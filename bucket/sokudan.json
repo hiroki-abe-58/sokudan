@@ -1,0 +1,37 @@
+{
+    "version": "0.3.0",
+    "description": "Japanese decision model with typed answers and probabilities",
+    "homepage": "https://github.com/hiroki-abe-58/sokudan",
+    "license": "Apache-2.0",
+    "depends": "main/uv",
+    "architecture": {
+        "64bit": {
+            "url": "https://files.pythonhosted.org/packages/e4/88/1a5b5b9aa4ca08a43fde22016f5d179ccc3e0c73f824230f567af3f06a44/sokudan-0.3.0.tar.gz",
+            "hash": "15c3e67b56a3aebf3496ecf896a34dfc6df2c98eb1658380f794d3b074f13c0d"
+        }
+    },
+    "extract_dir": "sokudan-0.3.0",
+    "extract_to": "source",
+    "pre_install": [
+        "$launcher = @'",
+        "$ErrorActionPreference = 'Stop'",
+        "if ($args.Count -eq 1 -and $args[0] -eq '--version') { Write-Output '__VERSION__'; exit 0 }",
+        "if ($args.Count -eq 0 -or ($args.Count -eq 1 -and $args[0] -in @('-h', '--help'))) {",
+        "    Write-Output 'sokudan __VERSION__: serve | probe-position'",
+        "    Write-Output 'First use installs Python and dependencies through uv. Run: sokudan serve --help'",
+        "    exit 0",
+        "}",
+        "$extras = if ($args[0] -eq 'probe-position') { 'serve,train,bench,torch' } else { 'serve' }",
+        "$source = Join-Path $PSScriptRoot 'source'",
+        "& uv.exe tool run --python 3.11 --from \"${source}[$extras]\" sokudan @args",
+        "exit $LASTEXITCODE",
+        "'@",
+        "$launcher.Replace('__VERSION__', $version) | Set-Content -LiteralPath \"$dir/sokudan.ps1\" -Encoding UTF8"
+    ],
+    "bin": "sokudan.ps1",
+    "notes": [
+        "Windows x64 launcher; first use downloads Python 3.11 and Python dependencies into uv's cache.",
+        "Starting the server downloads Hugging Face model weights. Run: sokudan serve --port 8000",
+        "Uninstalling this package leaves uv and Hugging Face caches intact."
+    ]
+}

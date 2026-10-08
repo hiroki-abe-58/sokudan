@@ -17,7 +17,8 @@ separate from adding package source files to this repository.
 | GHCR | `Dockerfile.serve`, `container.yml`: Linux amd64 CPU server | Published as [`0.3.0-cpu`](https://github.com/hiroki-abe-58/sokudan/pkgs/container/sokudan); model inference passed; anonymous manifest/config download verified |
 | Docker Hub | Same tested serving image | Choose namespace; authenticate and push |
 | Conda / conda-forge | Not implemented | Resolve MLX/PyTorch dependencies; build/test recipe; submit |
-| Scoop / WinGet / Chocolatey | Not implemented | Test Windows distribution; prepare manifests/packages |
+| Scoop own bucket | `bucket/sokudan.json`: Windows x64 uv launcher | Windows installation, startup, and uninstall are checked by `scoop.yml`; available after merge |
+| WinGet / Chocolatey | Not implemented | WinGet needs a supported installer/portable artifact; Chocolatey needs an account and package review |
 | Nix / AUR | Not implemented | Resolve native dependencies and test builds on target systems |
 | JSR | SDK source is separate from Node-only CLI | Choose JSR scope, validate and publish SDK |
 
@@ -105,6 +106,26 @@ Homebrew core as if it were an offline, fully bundled Python formula.
 On each Python release update the Formula's URL and SHA-256 from PyPI, then rerun
 the installation check. Keep its version aligned with the npm release.
 
+## Windows: Scoop third-party bucket
+
+With [Scoop](https://scoop.sh/) already installed, run in PowerShell:
+
+```powershell
+scoop bucket add sokudan https://github.com/hiroki-abe-58/sokudan
+scoop install sokudan/sokudan
+sokudan serve --port 8000
+```
+
+The bucket targets Windows x64. It installs the checksummed PyPI source and a
+PowerShell launcher, with `main/uv` as its dependency. First use installs Python
+3.11 and the `serve` dependencies into uv's cache; `probe-position` additionally
+requests `train,bench,torch`. Model weights download when the server starts.
+This does not bundle a standalone executable or promise GPU inference support.
+
+`scoop uninstall sokudan` removes the launcher and package source. uv's cache and
+Hugging Face model cache remain. Each release must update the manifest version,
+source URL, SHA-256 and extracted directory together, and pass Windows CI.
+
 ## Serving container: GHCR and Docker Hub
 
 The root `Dockerfile` is still the clean-install regression check.
@@ -163,6 +184,8 @@ fully frozen; the image tag describes the packaged code, not immutable model wei
 - [uv tools](https://docs.astral.sh/uv/guides/tools/)
 - [Homebrew taps](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap)
 - [Homebrew language-specific formulae](https://docs.brew.sh/Language-Specific-Formulae)
+- [Scoop manifests](https://github.com/ScoopInstaller/Scoop/wiki/App-Manifests)
+- [Scoop buckets](https://github.com/ScoopInstaller/Scoop/wiki/Buckets)
 - [GHCR](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [conda-forge submissions](https://conda-forge.org/docs/maintainer/adding_pkgs/)
 - [WinGet submissions](https://learn.microsoft.com/en-us/windows/package-manager/package/)
