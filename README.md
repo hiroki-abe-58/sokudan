@@ -119,7 +119,7 @@ Guide: [`docs/serving.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/do
 ## JavaScript, Homebrew and containers
 
 Version 0.3.0 is available on [npm](https://www.npmjs.com/package/sokudan)
-as a TypeScript HTTP SDK and CLI launcher, through our Homebrew tap, and as a
+as a TypeScript HTTP SDK and CLI launcher, through our Homebrew tap and Windows x64 Scoop bucket, and as a
 [Linux amd64 CPU container](https://github.com/hiroki-abe-58/sokudan/pkgs/container/sokudan). See the
 [distribution guide](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/distribution.md)
 for setup, publication status and release steps.
