@@ -38,10 +38,11 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           sokudan serve --help
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: Verify errors propagate and uninstall removes the shim
+      - name: Verify spaced arguments, exit codes, and uninstall
         run: |
-          sokudan invalid-subcommand
+          $errorText = sokudan 'invalid subcommand' 2>&1 | Out-String
           if ($LASTEXITCODE -ne 2) { throw "Expected argparse exit 2, got $LASTEXITCODE" }
+          if ($errorText -notmatch "invalid choice: 'invalid subcommand'") { throw "Argument was not preserved: $errorText" }
           scoop uninstall sokudan
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           if (Get-Command sokudan -ErrorAction SilentlyContinue) { throw 'Launcher remains after uninstall' }
