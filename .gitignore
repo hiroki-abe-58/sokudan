@@ -43,5 +43,11 @@ Thumbs.db
 coverage.xml
 htmlcov/
 
+# JavaScript package
+node_modules/
+*.tgz
+/packages/npm/LICENSE
+/packages/npm/NOTICE
+
 # length 2x2 generated corpora and training sets (docs/length_2x2.md records counts and sha256)
 data/l2x2/

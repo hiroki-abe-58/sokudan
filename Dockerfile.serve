@@ -1,0 +1,25 @@
+# Serving image; the root Dockerfile remains the clean-install smoke check.
+FROM python:3.11-slim-bookworm
+
+LABEL org.opencontainers.image.source="https://github.com/hiroki-abe-58/sokudan" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/home/sokudan/.cache/huggingface
+
+WORKDIR /app
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch>=2.8,<3"
+COPY pyproject.toml README.md LICENSE NOTICE ./
+COPY sokudan ./sokudan
+RUN pip install --no-cache-dir ".[serve]" && pip check \
+    && useradd --create-home --uid 10001 sokudan \
+    && mkdir -p /home/sokudan/.cache/huggingface \
+    && chown -R sokudan:sokudan /home/sokudan
+
+USER sokudan
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=300s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"
+ENTRYPOINT ["sokudan", "serve"]
+CMD ["--host", "0.0.0.0", "--port", "8000", "--backend", "torch", "--device", "cpu"]

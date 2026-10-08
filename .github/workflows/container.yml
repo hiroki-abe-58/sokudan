@@ -1,0 +1,54 @@
+name: Serving container
+
+on:
+  pull_request:
+    paths: ['Dockerfile.serve', '.dockerignore', 'sokudan/**', 'pyproject.toml', 'scripts/check_serving_container.py', '.github/workflows/container.yml']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the tested image to GHCR (main branch only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build CPU image
+        run: docker build -f Dockerfile.serve -t sokudan-serve:test .
+      - name: Check packaged CLI and dependencies
+        run: |
+          docker run --rm sokudan-serve:test --help
+          docker run --rm --entrypoint python sokudan-serve:test -m pip check
+      - name: Test model loading and prediction
+        run: |
+          docker run -d --name sokudan-test -p 127.0.0.1:8000:8000 sokudan-serve:test
+          python scripts/check_serving_container.py
+      - name: Container logs
+        if: always()
+        run: docker logs sokudan-test || true
+      - name: Log in to GHCR
+        if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the tested image
+        if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          docker tag sokudan-serve:test "$IMAGE:$VERSION-cpu"
+          docker tag sokudan-serve:test "$IMAGE:sha-$COMMIT_SHA"
+          docker push "$IMAGE:$VERSION-cpu"
+          docker push "$IMAGE:sha-$COMMIT_SHA"

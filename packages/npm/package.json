@@ -1,0 +1,35 @@
+{
+  "name": "sokudan",
+  "version": "0.3.0",
+  "description": "Japanese decision model: typed HTTP SDK and CLI for sokudan",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "hiroki-abe-58",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hiroki-abe-58/sokudan.git",
+    "directory": "packages/npm"
+  },
+  "homepage": "https://github.com/hiroki-abe-58/sokudan#readme",
+  "bugs": "https://github.com/hiroki-abe-58/sokudan/issues",
+  "keywords": ["sokudan", "japanese", "nlp", "classification", "machine-learning"],
+  "engines": { "node": ">=22" },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "types": "./dist/index.d.ts",
+  "bin": { "sokudan": "dist/cli.mjs" },
+  "files": ["dist", "LICENSE", "NOTICE", "README.md"],
+  "scripts": {
+    "build": "tsc && node scripts/prepare-package.mjs",
+    "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test"
+  },
+  "publishConfig": { "access": "public" },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.3"
+  }
+}
