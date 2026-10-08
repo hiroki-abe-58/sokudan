@@ -22,9 +22,11 @@ jobs:
           & "$env:RUNNER_TEMP/install-scoop.ps1" -RunAsAdmin -ScoopDir "$env:RUNNER_TEMP/Scoop Test"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           "$env:RUNNER_TEMP/Scoop Test/shims" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "SCOOP=$env:RUNNER_TEMP/Scoop Test" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Install this checkout as a bucket
         run: |
-          scoop bucket add sokudan $env:GITHUB_WORKSPACE
+          $bucketUrl = 'file:///' + $env:GITHUB_WORKSPACE.Replace([char]92, [char]47)
+          scoop bucket add sokudan $bucketUrl
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           scoop install sokudan/sokudan
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
