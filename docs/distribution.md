@@ -17,7 +17,7 @@ separate from adding package source files to this repository.
 | GHCR | `Dockerfile.serve`, `container.yml`: Linux amd64 CPU server | Published as [`0.3.0-cpu`](https://github.com/hiroki-abe-58/sokudan/pkgs/container/sokudan); model inference passed; anonymous manifest/config download verified |
 | Docker Hub | Same tested serving image | Choose namespace; authenticate and push |
 | Conda / conda-forge | Not implemented | Resolve MLX/PyTorch dependencies; build/test recipe; submit |
-| Scoop own bucket | `bucket/sokudan.json`: Windows x64 uv launcher | Windows installation, startup, and uninstall are checked by `scoop.yml`; available after merge |
+| Scoop own bucket | `bucket/sokudan.json`: Windows x64 uv launcher | Available on main; Windows install, first-run CLI startup, spaced arguments, exit codes, and uninstall passed CI |
 | WinGet / Chocolatey | Not implemented | WinGet needs a supported installer/portable artifact; Chocolatey needs an account and package review |
 | Nix / AUR | Not implemented | Resolve native dependencies and test builds on target systems |
 | JSR | SDK source is separate from Node-only CLI | Choose JSR scope, validate and publish SDK |
@@ -121,6 +121,8 @@ PowerShell launcher, with `main/uv` as its dependency. First use installs Python
 3.11 and the `serve` dependencies into uv's cache; `probe-position` additionally
 requests `train,bench,torch`. Model weights download when the server starts.
 This does not bundle a standalone executable or promise GPU inference support.
+The [Windows installation check](https://github.com/hiroki-abe-58/sokudan/actions/runs/37776689531)
+passed with the Scoop root in a path containing spaces.
 
 `scoop uninstall sokudan` removes the launcher and package source. uv's cache and
 Hugging Face model cache remain. Each release must update the manifest version,
