@@ -118,11 +118,11 @@ Guide: [`docs/serving.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/do
 
 ## JavaScript, Homebrew and containers
 
-The repository also includes a [TypeScript HTTP SDK and CLI launcher](https://github.com/hiroki-abe-58/sokudan/tree/main/packages/npm),
-a Homebrew tap Formula, and a CPU serving container. See the
+Version 0.3.0 is available on [npm](https://www.npmjs.com/package/sokudan)
+as a TypeScript HTTP SDK and CLI launcher, through our Homebrew tap, and as a
+[Linux amd64 CPU container](https://github.com/hiroki-abe-58/sokudan/pkgs/container/sokudan). See the
 [distribution guide](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/distribution.md)
-for setup, publication status and release steps. Registry publication is separate
-from adding the package source.
+for setup, publication status and release steps.
 
 ## Used by
 
