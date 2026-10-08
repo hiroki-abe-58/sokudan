@@ -6,15 +6,15 @@ remain on Hugging Face and are downloaded when the server starts.
 
 ## Release status
 
-Adding these files does **not** publish a package. Before announcing an install
-command, verify the matching registry entry and a clean installation.
+Release status for 0.3.0. Registry publication and installation checks are
+separate from adding package source files to this repository.
 
-| Channel | Implementation in this repository | Remaining release step |
+| Channel | Implementation in this repository | Status / remaining release step |
 |---|---|---|
 | PyPI | Existing Python package, 0.3.0 | Existing release |
-| npm | `packages/npm`: CLI + typed ESM HTTP SDK | Initial authenticated publish; configure OIDC |
-| Homebrew own tap | `Formula/sokudan.rb`: uv launcher and checksummed Python source | Merge Formula; verify Homebrew CI |
-| GHCR | `Dockerfile.serve`, `container.yml`: Linux amd64 CPU server | Pass model smoke test; run manual publish; set package public |
+| npm | `packages/npm`: CLI + typed ESM HTTP SDK | Published as [`sokudan@0.3.0`](https://www.npmjs.com/package/sokudan); clean install verified; OIDC setup remains |
+| Homebrew own tap | `Formula/sokudan.rb`: uv launcher and checksummed Python source | Available on main; macOS install, `brew test`, and CLI startup passed CI |
+| GHCR | `Dockerfile.serve`, `container.yml`: Linux amd64 CPU server | Published as [`0.3.0-cpu`](https://github.com/hiroki-abe-58/sokudan/pkgs/container/sokudan); model inference passed; anonymous manifest/config download verified |
 | Docker Hub | Same tested serving image | Choose namespace; authenticate and push |
 | Conda / conda-forge | Not implemented | Resolve MLX/PyTorch dependencies; build/test recipe; submit |
 | Scoop / WinGet / Chocolatey | Not implemented | Test Windows distribution; prepare manifests/packages |
@@ -50,7 +50,10 @@ For an HTTP integration check against the real Python server with a fake model:
 SOKUDAN_TEST_PYTHON=/path/to/venv/bin/python node scripts/check-python-server.mjs
 ```
 
-Initial publication (from `packages/npm`, after verifying the account with
+Version 0.3.0 is published under the npm account `genelab`. Install the SDK with
+`npm install sokudan`, or the CLI with `npm install -g sokudan` (Node.js 22+).
+
+For a manual release (from `packages/npm`, after verifying the account with
 `npm whoami`):
 
 ```sh
@@ -58,8 +61,6 @@ npm login
 npm publish --access public
 ```
 
-The first-choice name is `sokudan`; an unregistered name is not a reservation.
-Do not silently publish under a different name/account if registration fails.
 The npm version pins the Python version used by the default CLI, so a matching
 non-yanked release must already exist on PyPI. `scripts/check-release.mjs`
 checks the tag and Python release before CI publishing.
@@ -80,7 +81,7 @@ under the current shared-version policy.
 
 ## Homebrew: third-party tap
 
-Once the Formula is merged into the default branch:
+Install from the third-party tap:
 
 ```sh
 brew tap hiroki-abe-58/sokudan https://github.com/hiroki-abe-58/sokudan
@@ -110,6 +111,21 @@ The root `Dockerfile` is still the clean-install regression check.
 `Dockerfile.serve` is the non-root CPU serving image. It initially targets
 **Linux amd64**; Apple silicon can emulate it but will not use MLX/MPS inside it.
 Native arm64 and CUDA images need their own build/runtime validation.
+
+Run the published image:
+
+```sh
+docker run --rm --platform linux/amd64 -p 127.0.0.1:8000:8000 \
+  -v sokudan-cache:/home/sokudan/.cache/huggingface \
+  ghcr.io/hiroki-abe-58/sokudan:0.3.0-cpu
+```
+
+The 0.3.0-cpu release digest is
+`sha256:c252e252d84cddb1599784e25cff9a6d2bb5e0d77fdc518922f8aa6a23b09836`.
+The [publication run](https://github.com/hiroki-abe-58/sokudan/actions/runs/37775222339)
+verified model loading and prediction before pushing the image.
+
+To build locally:
 
 ```sh
 docker build --platform linux/amd64 -f Dockerfile.serve -t sokudan-serve:0.3.0 .

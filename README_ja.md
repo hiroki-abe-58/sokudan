@@ -366,11 +366,10 @@ sokudan serve --port 8000
 
 ## JavaScript・Homebrew・コンテナ
 
-[TypeScript HTTP SDK と CLI ラッパー](https://github.com/hiroki-abe-58/sokudan/tree/main/packages/npm)、
-Homebrew tap 用 Formula、CPU 推論サーバーのコンテナ定義を追加しています。
+0.3.0 を [npm](https://www.npmjs.com/package/sokudan)（TypeScript HTTP SDK と CLI ラッパー）、
+独自 Homebrew tap、[GHCR](https://github.com/hiroki-abe-58/sokudan/pkgs/container/sokudan)（Linux amd64 CPU 推論サーバー）で公開しています。
 導入方法・各配信先の公開状況・リリース手順は
 [配信ガイド](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/distribution.md)を参照してください。
-パッケージのソース追加と、各レジストリへの公開は別の工程です。
 
 ## Used by
 
