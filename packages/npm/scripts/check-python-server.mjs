@@ -21,7 +21,7 @@ child.stdout.on('data', (data) => { log += data; });
 child.stderr.on('data', (data) => { log += data; });
 let spawnError;
 child.on('error', (error) => { spawnError = error; });
-const closed = once(child, 'close');
+const closed = new Promise((resolve) => child.once('close', resolve));
 const client = new Sokudan({ baseURL: `http://127.0.0.1:${port}`, timeoutMs: 1000 });
 try {
   const deadline = Date.now() + 30_000;

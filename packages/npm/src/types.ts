@@ -53,7 +53,7 @@ export interface NoulAnswer {
 }
 
 export type AnswerFor<Q extends Question> = Q extends ChoiceQuestion
-  ? ChoiceAnswer<Extract<keyof Q["criteria"], string>>
+  ? ChoiceAnswer<`${Extract<keyof Q["criteria"], string | number>}`>
   : Q extends ScoreQuestion ? ScoreAnswer : NoulAnswer;
 
 export interface SystemOneResponse<Q extends Questions = Questions> {

@@ -25,6 +25,13 @@ client.predict({ state: null, questions: {} });
 const bad: Questions = { x: { type: 'choice', instructions: 'missing criteria' } };
 void bad;
 
+// JSON converts numeric object keys into strings on the wire.
+const numeric = await client.predict({ state: 'text', questions: {
+  value: { type: 'choice', instructions: 'choose', criteria: { 1: 'one', 2: 'two' } },
+} });
+const numericLabel: '1' | '2' = numeric.answers.value.choice;
+void numericLabel;
+
 const dynamic: Questions = {};
 const dynamicResponse = await client.predict({ state: 'text', questions: dynamic });
 const answer = dynamicResponse.answers.any;
