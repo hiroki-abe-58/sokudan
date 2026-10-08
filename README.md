@@ -116,6 +116,14 @@ Development version: `pip install "sokudan[serve] @ git+https://github.com/hirok
 Built from public documentation and the examples in open implementations' READMEs; not affiliated with or endorsed by TypeSafe AI, and this repository never calls their service.
 Guide: [`docs/serving.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/serving.md). Field-by-field table: [`docs/systemone_wire_format.md`](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/systemone_wire_format.md).
 
+## JavaScript, Homebrew and containers
+
+The repository also includes a [TypeScript HTTP SDK and CLI launcher](https://github.com/hiroki-abe-58/sokudan/tree/main/packages/npm),
+a Homebrew tap Formula, and a CPU serving container. See the
+[distribution guide](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/distribution.md)
+for setup, publication status and release steps. Registry publication is separate
+from adding the package source.
+
 ## Used by
 
 - Expense account suggestion in an accounting app (PoC): given a purchase description, sokudan ranks 1–3 candidate accounts for a human to confirm, running on an M1 Max. [Thread on X](https://x.com/t28k2/status/2104322335671206306)

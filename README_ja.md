@@ -364,6 +364,14 @@ sokudan serve --port 8000
 - **state は文字列で送ってください**（上の Quickstart の注意と同じ理由です）。
 - 手順: [`docs/serving.md`](docs/serving.md)。各フィールドの扱いと、資料どうしの食い違い: [`docs/systemone_wire_format.md`](docs/systemone_wire_format.md)。
 
+## JavaScript・Homebrew・コンテナ
+
+[TypeScript HTTP SDK と CLI ラッパー](https://github.com/hiroki-abe-58/sokudan/tree/main/packages/npm)、
+Homebrew tap 用 Formula、CPU 推論サーバーのコンテナ定義を追加しています。
+導入方法・各配信先の公開状況・リリース手順は
+[配信ガイド](https://github.com/hiroki-abe-58/sokudan/blob/main/docs/distribution.md)を参照してください。
+パッケージのソース追加と、各レジストリへの公開は別の工程です。
+
 ## Used by
 
 - 会計アプリの勘定科目の候補提示（PoC）: 購入内容の文から 1〜3 件の勘定科目候補を順位づけし、人が確認する。M1 Max で動作。[X のスレッド](https://x.com/t28k2/status/2104322335671206306)

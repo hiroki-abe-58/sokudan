@@ -1,0 +1,23 @@
+name: Homebrew tap
+
+on:
+  pull_request:
+    paths: ['Formula/**', '.github/workflows/homebrew.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create a local tap from this checkout
+        run: |
+          brew tap-new hiroki-abe-58/sokudan --no-git
+          cp Formula/sokudan.rb "$(brew --repository)/Library/Taps/hiroki-abe-58/homebrew-sokudan/Formula/sokudan.rb"
+      - run: brew install hiroki-abe-58/sokudan/sokudan
+      - run: brew test hiroki-abe-58/sokudan/sokudan
+      - name: Verify first-run Python dependency installation
+        run: sokudan serve --help
